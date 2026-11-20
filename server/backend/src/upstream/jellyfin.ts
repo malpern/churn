@@ -15,6 +15,7 @@ export interface JellyfinSystemInfo extends JellyfinPublicInfo {
 
 export interface JellyfinUserPolicy {
   IsAdministrator?: boolean;
+  IsDisabled?: boolean;
 }
 
 export interface JellyfinUser {
@@ -213,6 +214,13 @@ export function createJellyfinClient(
           body: { Username: username, Pw: password },
         },
       );
+    },
+
+    async currentUser(): Promise<JellyfinUser> {
+      return fetchJson<JellyfinUser>("jellyfin", `${config.url}/Users/Me`, {
+        timeoutMs,
+        headers: authHeaders(),
+      });
     },
 
     async logout(accessToken: string): Promise<void> {

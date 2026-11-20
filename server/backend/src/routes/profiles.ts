@@ -14,6 +14,7 @@ import { createJellyfinClient } from "../upstream/jellyfin.js";
 
 export interface ProfileDependencies {
   store: SessionStore;
+  revokePasskeys: (userId: string) => Promise<void>;
 }
 
 interface ProfileParams {
@@ -91,7 +92,8 @@ export function registerProfileRoutes(
       }
 
       deps.store.setProfilePin(profile.id, pin);
-      deps.store.destroyAllForProfile(profile.id);
+      deps.store.destroyAllForUser(profile.jellyfinUserId);
+      await deps.revokePasskeys(profile.jellyfinUserId);
       return { profile: managedProfile(profile), pin };
     },
   );
@@ -117,8 +119,9 @@ export function registerProfileRoutes(
       }
     }
 
-    deps.store.destroyAllForProfile(profile.id);
+    deps.store.destroyAllForUser(profile.jellyfinUserId);
     deps.store.deleteProfile(profile.id);
+    await deps.revokePasskeys(profile.jellyfinUserId);
     return reply.code(204).send();
   });
 }

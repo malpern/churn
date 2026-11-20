@@ -1,11 +1,12 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { browserSupportsWebAuthnAutofill } from "@simplewebauthn/browser";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftIcon,
   CircleAlertIcon,
   LogInIcon,
-  ShieldIcon,
-  UserRoundIcon,
+  FingerprintIcon,
+  KeyRoundIcon,
 } from "lucide-react";
 
 import { ApiClientError, fetchProfiles } from "@/api/client";
@@ -23,12 +24,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { canUsePasskeys, passkeyErrorMessage, signInWithPasskey, usePasskeyAvailability } from "@/features/auth/passkeys";
 
 type ProfileStep = "password" | "newPassword";
 
-export function LoginPage() {
-  const { login, profileLogin, isPending } = useAuth();
-  const [showAdmin, setShowAdmin] = useState(false);
+export function LoginPage({ onPasskeySetup }: { onPasskeySetup: () => void }) {
+  const { login, profileLogin, isPending, applySession } = useAuth();
+  const passkeys = usePasskeyAvailability() && canUsePasskeys();
+  const [passkeyPending, setPasskeyPending] = useState(false);
+  const prompt = useRef<AbortController | null>(null);
+  useEffect(() => () => prompt.current?.abort(), []);
+  const [passwordMode, setPasswordMode] = useState<"sign-in" | "setup" | null>(null);
   const [selected, setSelected] = useState<ProfileSummary | null>(null);
   const [stage, setStage] = useState<"pick" | "password">("pick");
   const [pin, setPin] = useState("");
@@ -41,6 +47,21 @@ export function LoginPage() {
     queryFn: fetchProfiles,
     retry: false,
   });
+
+  async function usePasskey() {
+    const controller = new AbortController();
+    prompt.current = controller;
+    setError(null);
+    setPasskeyPending(true);
+    try {
+      const session = await signInWithPasskey(controller.signal);
+      if (session) applySession(session);
+    } catch (caught) {
+      if (!controller.signal.aborted) setError(passkeyErrorMessage(caught, "Could not sign in with a passkey."));
+    } finally {
+      if (!controller.signal.aborted) setPasskeyPending(false);
+    }
+  }
 
   function resetProfileFlow() {
     setSelected(null);
@@ -116,27 +137,23 @@ export function LoginPage() {
 
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-8">
-      <div className="flex w-full max-w-2xl flex-col gap-6">
-        <div className="flex flex-col gap-1 text-center">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">Churn</h1>
-          <p className="text-sm text-muted-foreground">
-            {showAdmin
-              ? "Sign in with a Jellyfin account to manage people."
-              : "Who's watching?"}
-          </p>
-        </div>
+      <div className="flex w-full max-w-lg flex-col gap-6">
+        <h1 className="text-center font-heading text-4xl font-semibold tracking-tight lowercase">Churn</h1>
 
-        {showAdmin ? (
+        {passwordMode ? (
           <AdminSignIn
+            passkeys={passkeys && passwordMode === "sign-in"}
+            setupPasskey={passwordMode === "setup"}
             isPending={isPending}
             onCancel={() => {
-              setShowAdmin(false);
+              setPasswordMode(null);
               setError(null);
             }}
             onSubmit={async (username, password) => {
               setError(null);
               try {
                 await login({ username, password });
+                if (passwordMode === "setup") onPasskeySetup();
               } catch (caught) {
                 setError(
                   caught instanceof ApiClientError
@@ -228,10 +245,9 @@ export function LoginPage() {
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>People</CardTitle>
+              <CardTitle>Who’s watching?</CardTitle>
               <CardDescription>
-                Pick your profile to sign in. Each person gets their own watch
-                progress.
+                Sign in to pick up where you left off.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
@@ -250,58 +266,76 @@ export function LoginPage() {
                       key={profile.id}
                       type="button"
                       variant="outline"
-                      className="h-auto flex-col gap-2 py-5"
+                      className="h-auto min-w-0 flex-col gap-2 py-4"
+                      disabled={passkeyPending}
                       onClick={() => void selectProfile(profile)}
                     >
-                      <UserRoundIcon className="size-6" />
-                      <span className="font-medium">{profile.name}</span>
+                      <span aria-hidden="true" className="grid size-10 place-items-center rounded-full bg-muted text-base font-semibold">
+                        {Array.from(profile.name.trim())[0]?.toLocaleUpperCase() ?? "?"}
+                      </span>
+                      <span className="max-w-full truncate font-medium">{profile.name}</span>
                       {!profile.passwordSet ? (
                         <span className="text-xs text-muted-foreground">
-                          PIN not set up yet
+                          First sign-in
                         </span>
                       ) : null}
                     </Button>
                   ))}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No people have been added yet. An admin can create them from the
-                  People page.
-                </p>
-              )}
+              ) : null}
 
               {error ? <SignInError message={error} /> : null}
 
+              {passkeys ? (
+                <Button type="button" onClick={() => void usePasskey()} disabled={passkeyPending}>
+                  <FingerprintIcon data-icon="inline-start" />
+                  {passkeyPending ? "Waiting for your passkey…" : "Sign in with a passkey"}
+                </Button>
+              ) : null}
               <Button
                 type="button"
-                variant="ghost"
-                className="self-start"
+                disabled={passkeyPending}
+                variant={passkeys || profilesQuery.data?.length ? "outline" : "default"}
                 onClick={() => {
-                  setShowAdmin(true);
+                  setPasswordMode("sign-in");
                   setError(null);
                 }}
               >
-                <ShieldIcon data-icon="inline-start" />
-                Admin sign in
+                <KeyRoundIcon data-icon="inline-start" />
+                Sign in with a password
               </Button>
+              {passkeys && (
+                <Button
+                  type="button"
+                  variant="link"
+                  className="self-center"
+                  disabled={passkeyPending}
+                  onClick={() => {
+                    setPasswordMode("setup");
+                    setError(null);
+                  }}
+                >
+                  Set up a passkey
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
-
-        <p className="text-center text-xs text-muted-foreground">
-          Sessions last 12 hours of inactivity and survive dashboard restarts.
-        </p>
       </div>
     </main>
   );
 }
 
 function AdminSignIn({
+  passkeys,
+  setupPasskey,
   isPending,
   error,
   onCancel,
   onSubmit,
 }: {
+  passkeys: boolean;
+  setupPasskey: boolean;
   isPending: boolean;
   error: string | null;
   onCancel: () => void;
@@ -309,22 +343,40 @@ function AdminSignIn({
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [useAutofill, setUseAutofill] = useState(passkeys);
+  const { applySession } = useAuth();
+
+  useEffect(() => {
+    if (!useAutofill) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        if (await browserSupportsWebAuthnAutofill() && !controller.signal.aborted) {
+          const session = await signInWithPasskey(controller.signal, true);
+          if (session) applySession(session);
+        }
+      } catch {
+        // Password entry remains available when autofill is dismissed or unsupported.
+      }
+    })();
+    return () => controller.abort();
+  }, [applySession, useAutofill]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!username.trim() || !password) {
       return;
     }
+    setUseAutofill(false);
     await onSubmit(username.trim(), password);
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Admin sign in</CardTitle>
+        <CardTitle>{setupPasskey ? "Set up a passkey" : "Sign in with a password"}</CardTitle>
         <CardDescription>
-          Use a Jellyfin administrator account to add and manage people. Other
-          Jellyfin accounts can still sign in here too.
+          {setupPasskey ? "Sign in with your Jellyfin account to create a passkey." : "Use your Jellyfin account."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -334,7 +386,7 @@ function AdminSignIn({
             <Input
               id="username"
               name="username"
-              autoComplete="username"
+              autoComplete={passkeys ? "username webauthn" : "username"}
               autoFocus
               value={username}
               onChange={(event) => setUsername(event.target.value)}
@@ -368,7 +420,7 @@ function AdminSignIn({
             </Button>
             <Button type="submit" className="sm:flex-1" disabled={isPending}>
               <LogInIcon data-icon="inline-start" />
-              {isPending ? "Signing in…" : "Sign in"}
+              {isPending ? "Signing in…" : setupPasskey ? "Continue" : "Sign in"}
             </Button>
           </div>
         </form>
