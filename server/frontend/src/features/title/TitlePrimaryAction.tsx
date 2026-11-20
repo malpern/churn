@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import { PlayIcon } from "lucide-react";
 
+import type { ActivityStatus } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -21,14 +23,28 @@ export type TitleAction =
       kind: "downloading";
       eta?: string;
       progress: number;
+      starting?: boolean;
+      ready?: boolean;
+      status?: ActivityStatus;
       /** Live qBittorrent figures; absent for the first seconds after a grab. */
       download?: DownloadStatsSource;
     };
 
 export function TitlePrimaryAction({ action }: { action: TitleAction }) {
+  const previous = useRef(action.kind);
+  const [justPlayable, setJustPlayable] = useState(false);
+  useEffect(() => {
+    const completed = previous.current === "downloading" && action.kind === "play";
+    previous.current = action.kind;
+    if (!completed) return;
+    setJustPlayable(true);
+    const timeout = window.setTimeout(() => setJustPlayable(false), 5_000);
+    return () => window.clearTimeout(timeout);
+  }, [action.kind]);
+
   if (action.kind === "play") {
     return (
-      <Button asChild className="h-12 gap-3 px-5 text-base">
+      <Button asChild className={`h-12 gap-3 px-5 text-base${justPlayable ? " motion-ready" : ""}`}>
         <a href={action.href}>
           <PlayIcon data-icon="inline-start" className="size-4" fill="currentColor" />
           {action.label}
@@ -40,11 +56,21 @@ export function TitlePrimaryAction({ action }: { action: TitleAction }) {
     );
   }
 
+  if (action.kind === "downloading" && action.ready) {
+    return <span role="status" className="motion-ready text-sm font-medium text-primary">Ready to play</span>;
+  }
+
   if (action.kind === "downloading") {
+    const label = action.starting ? "Starting download…" : {
+      queued: "Queued",
+      downloading: "Downloading",
+      importing: "Importing",
+      warning: "Download needs attention",
+    }[action.status ?? "downloading"];
     return (
-      <div className="flex w-full max-w-md min-w-44 flex-col gap-2 border border-border px-4 py-2.5">
+      <div className="motion-action-swap flex w-full max-w-md min-w-44 flex-col gap-2 border border-border px-4 py-2.5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-          <span className="text-sm font-medium text-foreground">Downloading</span>
+          <span role="status" className="text-sm font-medium text-foreground">{label}</span>
           {action.eta ? (
             <span className="text-xs text-muted-foreground tabular-nums">
               {action.eta}
@@ -52,7 +78,7 @@ export function TitlePrimaryAction({ action }: { action: TitleAction }) {
           ) : null}
         </div>
         <Progress
-          value={action.progress}
+          value={action.progress} smooth={action.status === "downloading"}
           className="h-1.5 w-full"
           aria-label="Download progress"
         />
