@@ -393,3 +393,64 @@
   max-width: none;
   aspect-ratio: auto;
 }
+
+/* Sign-in moment (features/auth/SignInFlourish.tsx). 820ms total:
+   ring draws one turn 60–480ms, the wordmark settles as it closes,
+   then the layer lifts and fades 480–820ms over the live dashboard. */
+.signin-flourish {
+  animation: churn-signin-out 340ms cubic-bezier(0.23, 1, 0.32, 1) 480ms forwards;
+}
+
+.signin-flourish-mark {
+  animation: churn-signin-settle 340ms cubic-bezier(0.23, 1, 0.32, 1) 300ms both;
+}
+
+.signin-flourish-ring {
+  transform-origin: center;
+  rotate: -90deg;
+}
+
+.signin-flourish-ring circle {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: churn-signin-ring 420ms cubic-bezier(0.65, 0, 0.35, 1) 60ms forwards;
+}
+
+.signin-flourish-name {
+  animation: churn-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1) 120ms both;
+}
+
+@keyframes churn-signin-ring {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes churn-signin-settle {
+  from { transform: scale(1); }
+  45% { transform: scale(1.03); }
+  to { transform: scale(1); }
+}
+
+@keyframes churn-signin-out {
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+/* Reduced motion: no drawing, no movement — the finished mark, then a plain fade. */
+@media (prefers-reduced-motion: reduce) {
+  .signin-flourish {
+    animation: churn-fade-out 240ms ease 360ms forwards;
+  }
+
+  .signin-flourish-mark,
+  .signin-flourish-name {
+    animation: none;
+  }
+
+  .signin-flourish-ring circle {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

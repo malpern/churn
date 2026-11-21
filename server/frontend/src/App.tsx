@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchStatus } from "@/api/client";
@@ -8,6 +8,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { AuthProvider, useAuth } from "@/features/auth/AuthProvider";
 import { useLibraryPosterNavigation } from "@/features/library/use-library-poster-navigation";
 import { PasskeySettings } from "@/features/auth/PasskeySettings";
+import { SignInFlourish } from "@/features/auth/SignInFlourish";
 import { LibraryPage } from "@/pages/LibraryPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { MoviePage } from "@/pages/MoviePage";
@@ -29,13 +30,19 @@ export default function App() {
 }
 
 function AppShell() {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, signIns } = useAuth();
+  /** The sign-in whose moment is playing; 0 = none (also after a restored session). */
+  const [flourish, setFlourish] = useState(0);
+  const endFlourish = useCallback(() => setFlourish(0), []);
   const [showPasskeys, setShowPasskeys] = useState<false | "manage" | "setup">(false);
   const authenticated = session?.authenticated === true && !!session.user;
 
   useEffect(() => {
     if (!authenticated) setShowPasskeys(false);
   }, [authenticated]);
+  useEffect(() => {
+    if (signIns > 0) setFlourish(signIns);
+  }, [signIns]);
 
   if (isLoading) {
     return <AppLoading />;
@@ -46,6 +53,9 @@ function AppShell() {
   return (
     <>
       <Dashboard onManagePasskeys={() => setShowPasskeys("manage")} />
+      {flourish > 0 && (
+        <SignInFlourish key={flourish} name={session?.user?.name} onDone={endFlourish} />
+      )}
       {showPasskeys && (
         <PasskeySettings
           startAdding={showPasskeys === "setup"}
