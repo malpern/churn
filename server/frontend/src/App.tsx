@@ -8,7 +8,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { AuthProvider, useAuth } from "@/features/auth/AuthProvider";
 import { useLibraryPosterNavigation } from "@/features/library/use-library-poster-navigation";
 import { PasskeySettings } from "@/features/auth/PasskeySettings";
-import { SignInFlourish } from "@/features/auth/SignInFlourish";
+import { SignInHandoff } from "@/features/auth/SignInHandoff";
 import { LibraryPage } from "@/pages/LibraryPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { MoviePage } from "@/pages/MoviePage";
@@ -54,7 +54,7 @@ function AppShell() {
     <>
       <Dashboard onManagePasskeys={() => setShowPasskeys("manage")} />
       {flourish > 0 && (
-        <SignInFlourish key={flourish} name={session?.user?.name} onDone={endFlourish} />
+        <SignInHandoff key={flourish} onDone={endFlourish} />
       )}
       {showPasskeys && (
         <PasskeySettings
@@ -90,7 +90,7 @@ function Dashboard({ onManagePasskeys }: { onManagePasskeys: () => void }) {
   return (
     <div className="flex min-h-dvh w-full flex-col">
       <AppHeader route={route} onManagePasskeys={onManagePasskeys} />
-      <main ref={main} tabIndex={-1} data-title-from-library={poster ? "" : undefined} className="mx-auto flex w-full max-w-content flex-1 flex-col gap-8 px-4 py-6 sm:px-6 lg:px-10">
+      <main ref={main} tabIndex={-1} data-signin-arrive="" data-title-from-library={poster ? "" : undefined} className="mx-auto flex w-full max-w-content flex-1 flex-col gap-8 px-4 py-6 sm:px-6 lg:px-10">
         {route.page === "services" ? (
           <ServicesPage
             status={statusQuery.data}

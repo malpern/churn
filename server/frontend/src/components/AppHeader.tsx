@@ -37,7 +37,7 @@ export function AppHeader({ route, onManagePasskeys }: AppHeaderProps) {
   const isAdmin = user?.isAdmin === true;
 
   return (
-    <header className="border-b">
+    <header data-signin-arrive="" className="border-b">
       <div className="mx-auto flex w-full max-w-content flex-wrap items-center gap-x-6 px-4 sm:px-6 lg:px-10">
         <a
           href="#/library"
@@ -79,7 +79,7 @@ export function AppHeader({ route, onManagePasskeys }: AppHeaderProps) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-auto gap-2 py-1 pr-1.5 pl-1">
-                  <Avatar size="sm">
+                  <Avatar size="sm" data-signin-target="">
                     <AvatarFallback>{initial(user.name)}</AvatarFallback>
                   </Avatar>
                   <span className="max-w-40 truncate">{user.name}</span>

@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { canUsePasskeys, passkeyErrorMessage, signInWithPasskey, usePasskeyAvailability } from "@/features/auth/passkeys";
+import { rememberSignInControl } from "@/features/auth/signin-handoff";
 
 type ProfileStep = "password" | "newPassword";
 
@@ -168,7 +169,17 @@ export function LoginPage({ onPasskeySetup }: { onPasskeySetup: () => void }) {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4 py-8">
+    <main
+      className="flex min-h-dvh items-center justify-center px-4 py-8"
+      // The sign-in hand-off departs from whatever started the sign-in.
+      onClickCapture={(event) => rememberSignInControl((event.target as Element).closest("button"))}
+      onSubmitCapture={(event) =>
+        rememberSignInControl(
+          (event.nativeEvent as SubmitEvent).submitter ??
+            event.currentTarget.querySelector("form button[type=submit]"),
+        )
+      }
+    >
       <div className="flex w-full max-w-2xl flex-col gap-6">
         <div className="flex flex-col gap-1 text-center">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">Churn</h1>

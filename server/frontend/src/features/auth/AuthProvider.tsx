@@ -21,6 +21,7 @@ import type {
   ProfileLoginInput,
   ProfileLoginResponse,
 } from "@/api/types";
+import { measureSignInDeparture } from "@/features/auth/signin-handoff";
 
 interface AuthContextValue {
   session: AuthSessionResponse | undefined;
@@ -59,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [signIns, setSignIns] = useState(0);
   const applySession = useCallback(
     (data: LoginResponse) => {
+      measureSignInDeparture();
       setSignIns((count) => count + 1);
       replaceSession({
         authenticated: true,
