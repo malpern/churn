@@ -45,6 +45,22 @@ describe("tasteSignals", () => {
   });
 });
 
+describe("tasteSignals favourites", () => {
+  it("counts a movie favourited in Jellyfin as a favourite, played or not", () => {
+    const signals = tasteSignals([
+      { Type: "Movie", Genres: ["Western"], UserData: { IsFavorite: true } },
+      { Type: "Movie", Genres: ["Drama"], UserData: { IsFavorite: true, Played: true, PlayCount: 3 } },
+      { Type: "Movie", Genres: ["Comedy"], UserData: { IsFavorite: false } },
+    ]);
+    expect(signals).toEqual([
+      { genres: ["Western"], playCount: 0, favorite: true },
+      { genres: ["Drama"], playCount: 3, favorite: true },
+      { genres: ["Comedy"], playCount: 0 },
+    ]);
+    expect(genreWeights(signals).get("western")).toBe(6);
+  });
+});
+
 describe("genreWeights", () => {
   it("weighs a favourite above a played movie, and a played one above one only kept", () => {
     const weights = genreWeights([
