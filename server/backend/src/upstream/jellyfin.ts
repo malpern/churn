@@ -56,6 +56,8 @@ export interface JellyfinItem {
     /** Jellyfin's own percentage; present on resume-list items. */
     PlayedPercentage?: number;
     Played?: boolean;
+    /** The person marked it as a favourite in Jellyfin. */
+    IsFavorite?: boolean;
     PlayCount?: number;
     LastPlayedDate?: string;
   };

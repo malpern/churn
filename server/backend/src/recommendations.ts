@@ -23,8 +23,8 @@ export interface Candidate {
 
 /**
  * The signed-in person's movies from Jellyfin, as taste signals. Jellyfin is
- * the only record of what anyone watched, so played movies come from its
- * per-user `UserData`, never from a churn-side history.
+ * the only record of what anyone watched or marked as a favourite, so both come
+ * from its per-user `UserData`, never from a churn-side history.
  */
 export function tasteSignals(items: JellyfinItem[]): TasteSignal[] {
   return items
@@ -32,6 +32,7 @@ export function tasteSignals(items: JellyfinItem[]): TasteSignal[] {
     .map((item) => ({
       genres: item.Genres ?? [],
       playCount: item.UserData?.Played ? Math.max(1, item.UserData.PlayCount ?? 1) : 0,
+      ...(item.UserData?.IsFavorite ? { favorite: true } : {}),
     }));
 }
 
