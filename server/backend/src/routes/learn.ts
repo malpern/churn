@@ -4,8 +4,10 @@ import type { AppConfig } from "../config.js";
 import { requireAuth } from "../auth.js";
 import { ApiError } from "../errors.js";
 import {
+  JUNK_KEYWORDS,
   LEARN_SUBJECTS,
   chooseKeywordIds,
+  looksLikeJunk,
   dailySeed,
   mentionsTopic,
   pickExploration,
@@ -139,14 +141,14 @@ export function registerLearnRoutes(
       const since = yearsAgo(3);
       const [acclaimed, recent] = await Promise.all([
         discoverBoth(key, config, { keywordIds: ids, sortBy: "vote_count.desc", minVotes: 10 }),
-        discoverBoth(key, config, { keywordIds: ids, sortBy: "popularity.desc", minVotes: 5, since }),
+        discoverBoth(key, config, { keywordIds: ids, sortBy: "popularity.desc", minVotes: 15, since }),
       ]);
       const rows = await finishRows(key, config, library, [
         { id: `subject-${subject.id}-acclaimed`, title: `Acclaimed: ${subject.label}`, titles: rankTitles(acclaimed, { limit: 40 }) },
         {
           id: `subject-${subject.id}-recent`,
           title: "From the last few years",
-          titles: rankTitles(recent, { limit: 40, floor: 6.3 }),
+          titles: rankTitles(recent, { limit: 40 }),
         },
       ]);
       const response: LearnSubjectResponse = { state: "ok", subject: summary, rows };
@@ -215,7 +217,7 @@ async function tmdbLearn(
   const shelves = await mapLimit(topics, 4, async (topic, index) => {
     const ids = topicIds[index] ?? [];
     if (ids.length === 0) return [];
-    return tolerant(discoverBoth(key, config, { keywordIds: ids, sortBy: "vote_count.desc", minVotes: 5 }), []);
+    return tolerant(discoverBoth(key, config, { keywordIds: ids, sortBy: "vote_count.desc", minVotes: 10 }), []);
   });
   topics.forEach((topic, index) => {
     const titles = rankTitles(shelves[index] ?? [], { limit: SHELF_SIZE * 2 }).filter(
@@ -231,14 +233,14 @@ async function tmdbLearn(
   });
 
   const [popular, acclaimed] = await Promise.all([
-    discoverBoth(key, config, { sortBy: "popularity.desc", minVotes: 20, since: yearsAgo(2) }),
+    discoverBoth(key, config, { sortBy: "popularity.desc", minVotes: 50, since: yearsAgo(2) }),
     discoverBoth(key, config, { sortBy: "vote_average.desc", minVotes: 300 }),
   ]);
   pending.push({
     id: "popular",
     title: "Popular right now",
     subtitle: "Documentaries and docuseries people are watching, on any subject.",
-    titles: rankTitles(popular, { limit: SHELF_SIZE, floor: 6.3 }),
+    titles: rankTitles(popular, { limit: SHELF_SIZE, floor: 7 }),
   });
   pending.push({
     id: "acclaimed",
@@ -298,7 +300,14 @@ async function keylessLearn(config: AppConfig, topics: string[], library: Librar
   const relevance = (movie: ServarrMovieResource) =>
     topics.some((topic) => mentionsTopic(`${movie.title ?? ""} ${movie.overview ?? ""}`, topic)) ? 1 : 0;
   const docs = movies
-    .filter((movie) => movie.genres?.includes("Documentary") && movie.tmdbId && !library.excluded.has(movie.tmdbId))
+    .filter(
+      (movie) =>
+        movie.genres?.includes("Documentary") &&
+        !movie.genres.includes("Horror") &&
+        movie.tmdbId &&
+        !library.excluded.has(movie.tmdbId) &&
+        !looksLikeJunk({ title: movie.title ?? "", overview: movie.overview }),
+    )
     .sort((a, b) => relevance(b) - relevance(a));
   const results: SearchResult[] = [];
   for (const movie of docs.slice(0, SHELF_SIZE)) {
@@ -417,6 +426,24 @@ async function topicKeywordIds(key: string, topic: string, config: AppConfig): P
   return ids;
 }
 
+/** The ids of the junk keywords, found once and cached like any keyword. */
+async function junkKeywordIds(key: string, config: AppConfig): Promise<number[]> {
+  const ids = await mapLimit(JUNK_KEYWORDS, 6, (keyword) =>
+    tolerant(
+      (async () => {
+        const cacheKey = `junk:${keyword}`;
+        const cached = keywordCache.get(cacheKey);
+        if (cached && cached.expires > Date.now()) return cached.ids;
+        const found = chooseKeywordIds(keyword, await tmdbSearchKeywords(key, keyword, timeout(config))).slice(0, 1);
+        keywordCache.set(cacheKey, { expires: Date.now() + ID_TTL_MS, ids: found });
+        return found;
+      })(),
+      [] as number[],
+    ),
+  );
+  return [...new Set(ids.flat())];
+}
+
 async function subjectKeywordIds(key: string, subject: LearnSubject, config: AppConfig): Promise<number[]> {
   const ids = await mapLimit(subject.keywords, 4, async (keyword) => {
     const cacheKey = `subject:${keyword}`;
@@ -436,9 +463,10 @@ async function discoverBoth(
   options: Omit<TmdbDiscoverOptions, "media">,
 ): Promise<TmdbTitle[]> {
   if (options.keywordIds && options.keywordIds.length === 0) return [];
+  const withoutKeywordIds = await junkKeywordIds(key, config);
   const [movies, shows] = await Promise.all([
-    cachedDiscover(key, config, { ...options, media: "movie" }),
-    cachedDiscover(key, config, { ...options, media: "tv" }),
+    cachedDiscover(key, config, { ...options, withoutKeywordIds, media: "movie" }),
+    cachedDiscover(key, config, { ...options, withoutKeywordIds, media: "tv" }),
   ]);
   return [...movies, ...shows];
 }

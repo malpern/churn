@@ -174,7 +174,15 @@ export interface TmdbDiscoverOptions {
   minAverage?: number;
   /** Only titles released (or first aired) on or after this date. */
   since?: string;
+  /** Leave out titles tagged with any of these keywords. */
+  withoutKeywordIds?: number[];
 }
+
+/**
+ * Genres that are never "learning" even when tagged documentary: reality,
+ * talk, soap and news shows; horror films (where ghost "documentaries" live).
+ */
+const EXCLUDED_GENRES = { movie: "27", tv: "10763,10764,10766,10767" } as const;
 
 /** One page of documentaries from TMDB's discover. */
 export async function tmdbDiscoverDocumentaries(
@@ -186,8 +194,10 @@ export async function tmdbDiscoverDocumentaries(
     with_genres: String(TMDB_DOCUMENTARY_GENRE),
     sort_by: options.sortBy,
     include_adult: "false",
+    without_genres: EXCLUDED_GENRES[options.media],
     page: "1",
   });
+  if (options.withoutKeywordIds?.length) query.set("without_keywords", options.withoutKeywordIds.join(","));
   if (options.keywordIds?.length) query.set("with_keywords", options.keywordIds.join("|"));
   if (options.minVotes !== undefined) query.set("vote_count.gte", String(options.minVotes));
   if (options.minAverage !== undefined) query.set("vote_average.gte", String(options.minAverage));
