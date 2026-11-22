@@ -5,7 +5,7 @@ import { requireAuth } from "../auth.js";
 import { ApiError } from "../errors.js";
 import { isMovieAvailable, mapMovieResource } from "../search.js";
 import { buildDiscoverRows } from "../discover.js";
-import { metadataRecommendations } from "../radarr-metadata.js";
+import { metadataCollection, metadataRecommendations } from "../radarr-metadata.js";
 import type { FavoriteStore } from "../recommendation-favorites.js";
 import {
   rankRecommendations,
@@ -14,6 +14,7 @@ import {
   type TasteSignal,
 } from "../recommendations.js";
 import type {
+  CollectionResponse,
   DiscoverResponse,
   SearchResult,
   FavoriteMovieSummary,
@@ -171,6 +172,62 @@ export function registerRecommendationRoutes(
         };
         return response;
       }
+    },
+  );
+
+  app.get<{ Params: { tmdbId: string } }>(
+    "/api/recommendations/collection/:tmdbId",
+    async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      requireAuth(request);
+      const tmdbId = parseTmdbId(request.params.tmdbId);
+      const collection = await metadataCollection(tmdbId, config.requestTimeoutMs);
+      if (!collection) {
+        const response: CollectionResponse = { state: "ok" };
+        return response;
+      }
+      // Which parts the household has comes from Radarr; without it the parts
+      // still show, just without "in library" marks.
+      let owned: Map<number, ServarrMovieResource> | null = null;
+      let state: CollectionResponse["state"] = "ok";
+      let detail: string | undefined;
+      if (config.services.radarr.apiKey) {
+        try {
+          const library = await createArrClient(
+            "radarr",
+            config.services.radarr,
+            config.requestTimeoutMs,
+          ).listMovies();
+          owned = new Map(
+            library.filter((movie) => movie.tmdbId).map((movie) => [movie.tmdbId!, movie] as const),
+          );
+        } catch (error) {
+          state = stateForError(error);
+          detail = errorMessage(error);
+        }
+      }
+      const results: SearchResult[] = [];
+      for (const part of collection.parts) {
+        const mine = owned?.get(part.tmdbId!);
+        const result = mapMovieResource(
+          part,
+          owned ? mine !== undefined : null,
+          mine ? isMovieAvailable(mine) : undefined,
+        );
+        if (!result) continue;
+        results.push(mine?.id ? { ...result, radarrId: mine.id } : result);
+      }
+      const response: CollectionResponse = {
+        state,
+        ...(detail ? { detail } : {}),
+        collection: {
+          tmdbId: collection.tmdbId,
+          name: collection.name,
+          overview: collection.overview,
+          results,
+        },
+      };
+      return response;
     },
   );
 

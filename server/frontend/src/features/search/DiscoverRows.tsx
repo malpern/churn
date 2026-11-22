@@ -19,7 +19,10 @@ interface DiscoverRowsProps {
   requestDisabled: boolean;
   isFavorite: (result: SearchResult) => boolean;
   onToggleFavorite: (result: SearchResult) => void;
-  onDismiss: (result: SearchResult) => void;
+  /** Leave out where hiding makes no sense (the parts of a series). */
+  onDismiss?: (result: SearchResult) => void;
+  /** The card for the page the row sits on, marked as such. */
+  currentKey?: string;
 }
 
 /**
@@ -51,6 +54,7 @@ export function DiscoverRowSection({
   isFavorite,
   onToggleFavorite,
   onDismiss,
+  currentKey,
 }: CardRowProps & { row: DiscoverResponse["rows"][number] }) {
   const [expanded, setExpanded] = useState(false);
   const headingId = `discover-${row.id.replace(/[^a-z0-9-]/gi, "-")}`;
@@ -64,7 +68,7 @@ export function DiscoverRowSection({
           <h2 id={headingId} className="font-heading text-xl font-semibold tracking-tight">
             {row.title}
           </h2>
-          {row.subtitle ? <p className="text-sm text-muted-foreground">{row.subtitle}</p> : null}
+          {row.subtitle ? <p className="line-clamp-2 max-w-prose text-sm text-muted-foreground">{row.subtitle}</p> : null}
         </div>
         {hidden > 0 ? (
           <Button
@@ -91,6 +95,7 @@ export function DiscoverRowSection({
             favorite={isFavorite(result)}
             onToggleFavorite={onToggleFavorite}
             onDismiss={onDismiss}
+            current={result.key === currentKey}
           />
         ))}
       </div>

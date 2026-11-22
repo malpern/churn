@@ -28,6 +28,8 @@ interface SearchResultCardProps {
   onToggleFavorite?: (result: SearchResult) => void;
   /** Present on recommendations: never suggest this movie again. */
   onDismiss?: (result: SearchResult) => void;
+  /** The movie whose page this card sits on. */
+  current?: boolean;
 }
 
 export function SearchResultCard({
@@ -40,6 +42,7 @@ export function SearchResultCard({
   favorite = false,
   onToggleFavorite,
   onDismiss,
+  current = false,
 }: SearchResultCardProps) {
   const errorId = useId();
   const restoreFocus = useRef(false);
@@ -59,11 +62,15 @@ export function SearchResultCard({
   const facts = [
     result.kind === "movie" ? "Movie" : "Series",
     result.year ? String(result.year) : null,
-    result.rating === undefined ? null : `${result.rating.toFixed(1)}/10`,
+    // Unreleased films come back rated 0; that is "no rating yet", not a score.
+    result.rating === undefined || result.rating <= 0 ? null : `${result.rating.toFixed(1)}/10`,
   ].filter((fact): fact is string => fact !== null);
 
   return (
-    <Card className="group/result gap-0 py-0">
+    <Card
+      className={`group/result gap-0 py-0 ${current ? "ring-2 ring-primary" : ""}`}
+      aria-current={current ? "page" : undefined}
+    >
       <div className="relative aspect-[2/3] bg-muted">
         {onToggleFavorite || onDismiss ? (
           <div className="absolute top-2 right-2 z-10 flex gap-1.5">
@@ -114,6 +121,7 @@ export function SearchResultCard({
             {result.title}
           </CardTitle>
           <p className="truncate text-xs text-muted-foreground tabular-nums">
+            {current ? <span className="font-medium text-primary">This movie · </span> : null}
             {facts.join(" · ")}
           </p>
         </div>
