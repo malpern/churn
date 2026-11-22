@@ -4,6 +4,7 @@ import { CircleAlertIcon } from "lucide-react";
 
 import { fetchMovie, fetchMovieDownload } from "@/api/client";
 import { MoreLikeThis } from "@/features/movie/MoreLikeThis";
+import { PartOfSeries } from "@/features/movie/PartOfSeries";
 import type { ActivityItem } from "@/api/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -261,6 +262,7 @@ export function MoviePage({
             />
           ) : null}
 
+          {movie.tmdbId !== undefined ? <PartOfSeries tmdbId={movie.tmdbId} /> : null}
           {movie.tmdbId !== undefined ? <MoreLikeThis tmdbId={movie.tmdbId} /> : null}
 
           <DeleteTitleDialog
