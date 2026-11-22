@@ -4,9 +4,11 @@ import {
   CheckIcon,
   ClockIcon,
   FilmIcon,
+  HeartIcon,
   Loader2Icon,
   PlusIcon,
   TvIcon,
+  XIcon,
 } from "lucide-react";
 
 import { MotionImage } from "@/components/MotionImage";
@@ -21,6 +23,11 @@ interface SearchResultCardProps {
   requestHref?: string;
   requestError?: string;
   requestDisabled: boolean;
+  /** Present for movies: a favourite steers recommendations without adding it to the library. */
+  favorite?: boolean;
+  onToggleFavorite?: (result: SearchResult) => void;
+  /** Present on recommendations: never suggest this movie again. */
+  onDismiss?: (result: SearchResult) => void;
 }
 
 export function SearchResultCard({
@@ -30,6 +37,9 @@ export function SearchResultCard({
   requestHref,
   requestError,
   requestDisabled,
+  favorite = false,
+  onToggleFavorite,
+  onDismiss,
 }: SearchResultCardProps) {
   const errorId = useId();
   const restoreFocus = useRef(false);
@@ -53,8 +63,26 @@ export function SearchResultCard({
   ].filter((fact): fact is string => fact !== null);
 
   return (
-    <Card className="gap-0 py-0">
-      <div className="aspect-[2/3] bg-muted">
+    <Card className="group/result gap-0 py-0">
+      <div className="relative aspect-[2/3] bg-muted">
+        {onToggleFavorite || onDismiss ? (
+          <div className="absolute top-2 right-2 z-10 flex gap-1.5">
+            {onToggleFavorite ? (
+              <PosterAction
+                label={favorite ? `Remove ${result.title} from favourites` : `Add ${result.title} to favourites`}
+                pressed={favorite}
+                onClick={() => onToggleFavorite(result)}
+              >
+                <HeartIcon className={favorite ? "fill-current text-primary" : undefined} />
+              </PosterAction>
+            ) : null}
+            {onDismiss ? (
+              <PosterAction label={`Not interested in ${result.title}`} onClick={() => onDismiss(result)}>
+                <XIcon />
+              </PosterAction>
+            ) : null}
+          </div>
+        ) : null}
         {result.imageUrl ? (
           <MotionImage
             src={result.imageUrl}
@@ -128,6 +156,38 @@ export function SearchResultCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * A small round button on the poster. Out of the way until the card is
+ * hovered or focused (always shown on touch screens, which cannot hover); a
+ * pressed favourite stays visible so the state is never hidden.
+ */
+function PosterAction({
+  label,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={pressed}
+      title={label}
+      onClick={onClick}
+      className={`flex size-8 items-center justify-center rounded-full bg-background/75 text-foreground shadow-sm backdrop-blur-sm transition-opacity duration-150 hover:bg-background focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring motion-reduce:transition-none [&>svg]:size-4 [@media(hover:none)]:opacity-100 ${
+        pressed ? "opacity-100" : "opacity-0 group-hover/result:opacity-100 group-focus-within/result:opacity-100"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

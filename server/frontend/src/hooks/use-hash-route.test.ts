@@ -9,6 +9,7 @@ describe("hash routing", () => {
     expect(parseHash("#/services")).toEqual({ page: "services" });
     expect(parseHash("#/search")).toEqual({ page: "search" });
     expect(parseHash("#/people")).toEqual({ page: "people" });
+    expect(parseHash("#/recommendations")).toEqual({ page: "recommendations" });
   });
 
   it("keeps the season on show routes", () => {
