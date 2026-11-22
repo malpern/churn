@@ -18,7 +18,9 @@ export type AppRoute =
   | { page: "play"; id: string; from?: ShowReturnContext; restart?: boolean }
   | { page: "search" }
   | { page: "people" }
-  | { page: "recommendations" };
+  | { page: "recommendations" }
+  | { page: "person"; id: string }
+  | { page: "settings" };
 
 export function useHashRoute(
   onNavigate?: (previous: AppRoute, next: AppRoute, commit: () => void) => void,
@@ -52,6 +54,11 @@ export function replaceHash(hash: string): void {
   window.history.replaceState(null, "", hash);
   // `replaceState` does not emit `hashchange`; notify the router ourselves.
   window.dispatchEvent(new HashChangeEvent("hashchange"));
+}
+
+/** Hash for the page of someone in the cast or crew (a Jellyfin person id). */
+export function personHash(id: string): string {
+  return `#/person/${encodeURIComponent(id)}`;
 }
 
 /** Hash for a show page, optionally pinned to one season. */
@@ -130,6 +137,12 @@ export function parseHash(hash: string): AppRoute {
   }
   if (parts.length === 1 && parts[0] === "recommendations") {
     return { page: "recommendations" };
+  }
+  if (parts.length === 1 && parts[0] === "settings") {
+    return { page: "settings" };
+  }
+  if (parts.length === 2 && parts[0] === "person" && parts[1]) {
+    return { page: "person", id: decodeURIComponent(parts[1]) };
   }
   if (parts.length === 2 && parts[0] === "play" && parts[1]) {
     const from = parseReturnContext(query);
