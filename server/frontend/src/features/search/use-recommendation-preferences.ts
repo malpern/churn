@@ -10,6 +10,7 @@ import {
   unhideRecommendation,
 } from "@/api/client";
 import type {
+  DiscoverResponse,
   FavoriteMovieSummary,
   RecommendationPreferences,
   RecommendationsResponse,
@@ -18,6 +19,7 @@ import type {
 
 const PREFERENCES_KEY = ["recommendation-preferences"] as const;
 const RECOMMENDATIONS_KEY = ["recommendations", "movies"] as const;
+const DISCOVER_KEY = ["discover", "movies"] as const;
 
 /**
  * Favourites and hidden movies for the recommendation row. Both act at once in
@@ -36,8 +38,10 @@ export function useRecommendationPreferences() {
     [preferencesQuery.data],
   );
 
-  const refreshRecommendations = () =>
+  const refreshRecommendations = () => {
     void queryClient.invalidateQueries({ queryKey: RECOMMENDATIONS_KEY });
+    void queryClient.invalidateQueries({ queryKey: DISCOVER_KEY });
+  };
 
   const setFavorites = (update: (favorites: FavoriteMovieSummary[]) => FavoriteMovieSummary[]) =>
     queryClient.setQueryData<RecommendationPreferences>(PREFERENCES_KEY, (current) =>
@@ -77,12 +81,24 @@ export function useRecommendationPreferences() {
       hideRecommendation({ tmdbId: result.tmdbId!, title: result.title, year: result.year }),
     onMutate: (result) => {
       const previous = queryClient.getQueryData<RecommendationsResponse>(RECOMMENDATIONS_KEY);
+      const previousDiscover = queryClient.getQueryData<DiscoverResponse>(DISCOVER_KEY);
       queryClient.setQueryData<RecommendationsResponse>(RECOMMENDATIONS_KEY, (current) =>
         current
           ? { ...current, results: current.results.filter((entry) => entry.key !== result.key) }
           : current,
       );
-      return { previous };
+      queryClient.setQueryData<DiscoverResponse>(DISCOVER_KEY, (current) =>
+        current
+          ? {
+              ...current,
+              rows: current.rows.map((row) => ({
+                ...row,
+                results: row.results.filter((entry) => entry.key !== result.key),
+              })),
+            }
+          : current,
+      );
+      return { previous, previousDiscover };
     },
     onSuccess: (hidden, result) => {
       void queryClient.invalidateQueries({ queryKey: PREFERENCES_KEY });
@@ -95,6 +111,9 @@ export function useRecommendationPreferences() {
     onError: (error, _result, context) => {
       if (context?.previous) {
         queryClient.setQueryData(RECOMMENDATIONS_KEY, context.previous);
+      }
+      if (context?.previousDiscover) {
+        queryClient.setQueryData(DISCOVER_KEY, context.previousDiscover);
       }
       toast.error("Could not hide that movie", { description: error.message });
     },

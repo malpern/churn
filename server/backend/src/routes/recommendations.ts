@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { AppConfig } from "../config.js";
 import { requireAuth } from "../auth.js";
 import { ApiError } from "../errors.js";
+import { buildDiscoverRows } from "../discover.js";
 import { metadataRecommendations } from "../radarr-metadata.js";
 import type { FavoriteStore } from "../recommendation-favorites.js";
 import {
@@ -12,6 +13,7 @@ import {
   type TasteSignal,
 } from "../recommendations.js";
 import type {
+  DiscoverResponse,
   FavoriteMovieSummary,
   RecommendationPreferences,
   RecommendationsResponse,
@@ -19,6 +21,7 @@ import type {
 import { createJellyfinClient } from "../upstream/jellyfin.js";
 import {
   createArrClient,
+  type ServarrImportList,
   type ServarrMovieResource,
   type ServarrRecommendedMovie,
 } from "../upstream/servarr.js";
@@ -36,11 +39,18 @@ const SEEDING_FAVORITES = 10;
 const SEEDS_PER_FAVORITE = 6;
 
 let radarrCache: { url: string; expires: number; movies: ServarrRecommendedMovie[] } | null = null;
+let discoverCache: {
+  url: string;
+  expires: number;
+  movies: ServarrRecommendedMovie[];
+  lists: ServarrImportList[];
+} | null = null;
 const lookupCache = new Map<number, { expires: number; movie: ServarrMovieResource | null }>();
 
 /** Forget cached Radarr answers. For tests. */
 export function clearRecommendationCache(): void {
   radarrCache = null;
+  discoverCache = null;
   lookupCache.clear();
 }
 
@@ -95,6 +105,31 @@ export function registerRecommendationRoutes(
       }),
     };
     return response;
+  });
+
+  app.get("/api/discover/movies", async (request, reply) => {
+    reply.header("cache-control", "no-store");
+    requireAuth(request);
+    if (!config.services.radarr.apiKey) {
+      const response: DiscoverResponse = {
+        state: "unconfigured",
+        detail: "Radarr is not configured, so there is nothing to discover.",
+        rows: [],
+      };
+      return response;
+    }
+    try {
+      const { movies, lists } = await loadDiscover(config);
+      const response: DiscoverResponse = { state: "ok", rows: buildDiscoverRows(movies, lists) };
+      return response;
+    } catch (error) {
+      const response: DiscoverResponse = {
+        state: stateForError(error),
+        detail: errorMessage(error),
+        rows: [],
+      };
+      return response;
+    }
   });
 
   app.get("/api/recommendations/preferences", async (request, reply) => {
@@ -167,6 +202,7 @@ export function registerRecommendationRoutes(
       const exclusion =
         existing ?? (await client.addExclusion({ tmdbId, movieTitle: title, movieYear: year }));
       radarrCache = null;
+      discoverCache = null;
       return { id: exclusion.id, tmdbId, title, year };
     } catch (error) {
       throw new ApiError(502, "radarr_exclusion_failed", errorMessage(error));
@@ -183,6 +219,7 @@ export function registerRecommendationRoutes(
     try {
       await requireRadarr(config).deleteExclusion(id);
       radarrCache = null;
+      discoverCache = null;
       return reply.code(204).send();
     } catch (error) {
       throw new ApiError(502, "radarr_exclusion_failed", errorMessage(error));
@@ -196,6 +233,32 @@ function requireRadarr(config: AppConfig) {
     throw new ApiError(503, "radarr_unconfigured", "Radarr is not configured");
   }
   return createArrClient("radarr", radarr, config.requestTimeoutMs);
+}
+
+/**
+ * Trending, popular and every import list's movies come from one Radarr call,
+ * plus the list names. Cached like the recommendations: Radarr refreshes its
+ * lists on its own schedule (at most every 12 hours), so a short cache loses
+ * nothing.
+ */
+async function loadDiscover(
+  config: AppConfig,
+): Promise<{ movies: ServarrRecommendedMovie[]; lists: ServarrImportList[] }> {
+  const service = config.services.radarr;
+  if (discoverCache && discoverCache.url === service.url && discoverCache.expires > Date.now()) {
+    return discoverCache;
+  }
+  const client = createArrClient(
+    "radarr",
+    service,
+    Math.max(config.requestTimeoutMs, config.searchTimeoutMs),
+  );
+  const [movies, lists] = await Promise.all([
+    client.listDiscoverMovies({ trending: true, popular: true }),
+    client.listImportLists().catch(() => [] as ServarrImportList[]),
+  ]);
+  discoverCache = { url: service.url, expires: Date.now() + RADARR_TTL_MS, movies, lists };
+  return discoverCache;
 }
 
 async function loadRadarrRecommendations(config: AppConfig): Promise<ServarrRecommendedMovie[]> {
