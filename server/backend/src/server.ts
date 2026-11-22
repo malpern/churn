@@ -32,6 +32,7 @@ import { registerProfileRoutes } from "./routes/profiles.js";
 import { registerRequestRoutes } from "./routes/requests.js";
 import { registerRequestedLibraryRoutes } from "./routes/requested.js";
 import { registerSearchRoutes } from "./routes/search.js";
+import { registerRecommendationRoutes } from "./routes/recommendations.js";
 import { registerServiceRoutes } from "./routes/services.js";
 import { registerShowRoutes } from "./routes/shows.js";
 import { registerStatsRoutes } from "./routes/stats.js";
@@ -190,6 +191,7 @@ export async function buildServer(
   registerRequestedLibraryRoutes(app, config, mediaCache, releaseSearch, mediaAttribution);
   registerMovieRoutes(app, config, releaseSearch);
   registerSearchRoutes(app, config);
+  registerRecommendationRoutes(app, config);
   registerRequestRoutes(app, config, mediaCache, releaseSearch, mediaAttribution);
   registerActivityRoutes(app, config, releaseEvents);
   registerShowRoutes(app, config, releaseSearch, introDb);

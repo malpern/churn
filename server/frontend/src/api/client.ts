@@ -34,6 +34,7 @@ import type {
   PlaybackReport,
   RequestedLibraryResponse,
   RequestOptionsResponse,
+  RecommendationsResponse,
   SearchResponse,
   ShowDetailResponse,
   ShowDownloadsResponse,
@@ -223,6 +224,10 @@ export function cancelEpisodeDownload(
   return deleteJson<CancelEpisodeDownloadResponse>(
     `/api/library/shows/sonarr/${encodeURIComponent(String(seriesId))}/episodes/${encodeURIComponent(String(seasonNumber))}/${encodeURIComponent(String(episodeNumber))}/download`,
   );
+}
+
+export function fetchMovieRecommendations(): Promise<RecommendationsResponse> {
+  return getJson<RecommendationsResponse>("/api/recommendations/movies");
 }
 
 export function fetchSearch(query: string): Promise<SearchResponse> {
