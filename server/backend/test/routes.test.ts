@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../src/config.js";
 import { buildServer } from "../src/server.js";
 import { clearServiceIconCache } from "../src/service-icons.js";
+import { clearRecommendationCache } from "../src/routes/recommendations.js";
 
 let testServerCounter = 0;
 
@@ -1819,6 +1820,54 @@ describe("library images", () => {
     const response = await app.inject({ method: "GET", url: "/api/library/images/movie-1" });
     expect(response.statusCode).toBe(404);
     await app.close();
+  });
+});
+
+describe("movie recommendations", () => {
+  it("returns Radarr's suggestions as request cards, minus what Radarr already has", async () => {
+    clearRecommendationCache();
+    installFetch((url) => {
+      if (url.startsWith("http://radarr.test:7878/api/v3/importlist/movie?")) {
+        expect(url).toContain("includeRecommendations=true");
+        return jsonResponse([
+          { tmdbId: 489, title: "Good Will Hunting", year: 1997, genres: ["Drama"], ratings: { tmdb: { value: 8.1 } } },
+          { tmdbId: 12154, title: "3 Men and a Baby", genres: ["Comedy"], isExisting: true },
+          { tmdbId: 9493, title: "Twins", year: 1988, genres: ["Comedy"], ratings: { tmdb: { value: 6.1 } } },
+        ]);
+      }
+      return jsonResponse({}, 404);
+    });
+    const app = await buildAuthedServer(makeConfig());
+    const response = await app.inject({ method: "GET", url: "/api/recommendations/movies" });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.state).toBe("ok");
+    // Jellyfin answered 404 here, so the order falls back to rating.
+    expect(body.results.map((result: { title: string }) => result.title)).toEqual([
+      "Good Will Hunting",
+      "Twins",
+    ]);
+    expect(body.results[0]).toMatchObject({ key: "movie:489", kind: "movie", inLibrary: false });
+    await app.close();
+  });
+
+  it("reports Radarr's state instead of failing the page", async () => {
+    clearRecommendationCache();
+    installFetch(() => jsonResponse({ message: "nope" }, 401));
+    const app = await buildAuthedServer(makeConfig());
+    const failing = await app.inject({ method: "GET", url: "/api/recommendations/movies" });
+    expect(failing.statusCode).toBe(200);
+    expect(failing.json()).toMatchObject({ state: "unauthorized", results: [] });
+    await app.close();
+
+    clearRecommendationCache();
+    const unconfigured = await buildAuthedServer(
+      makeConfig({ radarr: { id: "radarr", name: "Radarr", url: "http://radarr.test:7878", apiKey: undefined } }),
+    );
+    const missing = await unconfigured.inject({ method: "GET", url: "/api/recommendations/movies" });
+    expect(missing.json()).toMatchObject({ state: "unconfigured", results: [] });
+    await unconfigured.close();
   });
 });
 
