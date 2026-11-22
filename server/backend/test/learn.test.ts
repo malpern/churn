@@ -18,13 +18,13 @@ function title(id: number, voteAverage: number, voteCount: number, media: "movie
 
 describe("parseTopics", () => {
   it("reads a Topics line that wraps until a blank line", () => {
-    const text = "I like things.\n\nTopics: keyboards, interface design,\nAI; the New York Mets.\n\nTopics are fun.";
-    expect(parseTopics(text)).toEqual(["keyboards", "interface design", "AI", "the New York Mets"]);
+    const text = "I like things.\n\nTopics: jazz, space exploration,\nAI; the Roman Empire.\n\nTopics are fun.";
+    expect(parseTopics(text)).toEqual(["jazz", "space exploration", "AI", "the Roman Empire"]);
   });
 
   it("falls back to the lead-in of each bullet, and dedupes", () => {
-    const text = "- Keyboards: layouts\n* **Design** — motion\n- keyboards: again\nplain line: ignored";
-    expect(parseTopics(text)).toEqual(["Keyboards", "Design"]);
+    const text = "- Gardening: soil\n* **Design** — motion\n- gardening: again\nplain line: ignored";
+    expect(parseTopics(text)).toEqual(["Gardening", "Design"]);
   });
 
   it("returns nothing for free prose without either", () => {
