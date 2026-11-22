@@ -1985,6 +1985,42 @@ describe("movie recommendations", () => {
     await app.close();
   });
 
+  it("lists movies like this one, linking those already in the library", async () => {
+    clearRecommendationCache();
+    clearMetadataCache();
+    installFetch((url) => {
+      if (url === "https://api.radarr.video/v1/movie/453") {
+        return jsonResponse({
+          Recommendations: [{ TmdbId: 489 }, { TmdbId: 12154 }, { TmdbId: 426 }, { TmdbId: 453 }],
+        });
+      }
+      if (url === "http://radarr.test:7878/api/v3/movie") {
+        return jsonResponse([
+          { id: 1, tmdbId: 12154, title: "3 Men and a Baby", hasFile: true },
+          { id: 2, tmdbId: 453, title: "A Beautiful Mind", hasFile: true },
+        ]);
+      }
+      if (url.startsWith("http://radarr.test:7878/api/v3/exclusions/paged?")) {
+        return jsonResponse({ totalRecords: 1, records: [{ id: 5, tmdbId: 426, movieTitle: "Vertigo" }] });
+      }
+      if (url === "http://radarr.test:7878/api/v3/movie/lookup/tmdb?tmdbId=489") {
+        return jsonResponse({ tmdbId: 489, title: "Good Will Hunting", year: 1997 });
+      }
+      return jsonResponse({}, 404);
+    });
+    const app = await buildAuthedServer(makeConfig());
+    const response = await app.inject({ method: "GET", url: "/api/recommendations/similar/453" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().results).toEqual([
+      expect.objectContaining({ title: "Good Will Hunting", inLibrary: false }),
+      expect.objectContaining({ title: "3 Men and a Baby", inLibrary: true, available: true, radarrId: 1 }),
+    ]);
+    const bad = await app.inject({ method: "GET", url: "/api/recommendations/similar/nope" });
+    expect(bad.statusCode).toBe(400);
+    await app.close();
+  });
+
   it("reports Radarr's state instead of failing the page", async () => {
     clearRecommendationCache();
     installFetch(() => jsonResponse({ message: "nope" }, 401));

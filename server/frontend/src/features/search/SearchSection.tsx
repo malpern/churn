@@ -1,20 +1,13 @@
 import { useState } from "react";
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { CircleAlertIcon, Loader2Icon, SearchIcon } from "lucide-react";
-import { toast } from "sonner";
 
 import {
-  createRequest,
-  fetchRequestOptions,
   fetchDiscoverMovies,
   fetchMovieRecommendations,
   fetchSearch,
 } from "@/api/client";
 import type {
-  CreateRequestInput,
-  DiscoverResponse,
-  RecommendationsResponse,
-  SearchResponse,
   SearchResult,
   SearchServiceState,
 } from "@/api/types";
@@ -38,12 +31,8 @@ import { RecommendedMovies } from "@/features/search/RecommendedMovies";
 import { useRecommendationPreferences } from "@/features/search/use-recommendation-preferences";
 import { SearchResults, SearchResultsSkeleton } from "@/features/search/SearchResults";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useRequestDefaults } from "@/features/search/use-request-defaults";
+import { useTitleRequests } from "@/features/search/use-title-requests";
 
-interface RequestMutationVariables {
-  input: CreateRequestInput;
-  result: SearchResult;
-}
 
 export function SearchSection() {
   const [query, setQuery] = useState("");
@@ -51,18 +40,8 @@ export function SearchSection() {
   const debounced = useDebouncedValue(query, 350);
   const term = debounced.trim();
   const searchEnabled = term.length >= 2;
-  const queryClient = useQueryClient();
-  const [requestErrors, setRequestErrors] = useState<Record<string, string>>({});
-  const [requestLinks, setRequestLinks] = useState(() =>
-    queryClient.getQueryData<Record<string, string>>(["search-request-links"]) ?? {},
-  );
-
-  const optionsQuery = useQuery({
-    queryKey: ["request-options"],
-    queryFn: fetchRequestOptions,
-    staleTime: 5 * 60_000,
-  });
-  const defaults = useRequestDefaults(optionsQuery.data);
+  const requests = useTitleRequests();
+  const { onRequest: handleRequest, requestingKey, requestLinks, requestErrors } = requests;
 
   const searchQuery = useQuery({
     queryKey: ["search", term],
@@ -84,140 +63,6 @@ export function SearchSection() {
     queryFn: fetchDiscoverMovies,
     staleTime: 10 * 60_000,
   });
-
-  const requestMutation = useMutation({
-    mutationFn: ({ input }: RequestMutationVariables) => createRequest(input),
-    onSuccess: (data, variables) => {
-      const key = requestKey(variables.input);
-      const href = data.id === undefined ? undefined : data.service === "sonarr"
-        ? `#/library/show/sonarr/${data.id}`
-        : `#/library/movie/radarr/${data.id}`;
-      if (key && href) {
-        const links = queryClient.setQueryData<Record<string, string>>(
-          ["search-request-links"],
-          (previous) => ({ ...previous, [key]: href }),
-        );
-        if (links) setRequestLinks(links);
-      }
-      const viewAction = href
-        ? { label: "Pick a version", onClick: () => { window.location.hash = href; } }
-        : undefined;
-      if (data.status === "added") {
-        toast.success(`Requested ${formatTitle(data.title, data.year)}`, {
-          description:
-            "Added to the library. Searching for releases in the background.",
-          action: viewAction,
-          duration: 12_000,
-        });
-      } else {
-        toast.info(`${formatTitle(data.title, data.year)} is already requested`, {
-          action: viewAction,
-          duration: 12_000,
-        });
-      }
-      if (key) {
-        queryClient.setQueriesData<SearchResponse>({ queryKey: ["search"] }, (current) =>
-          current
-            ? {
-                ...current,
-                results: current.results.map((result) =>
-                  result.key === key ? { ...result, inLibrary: true } : result,
-                ),
-              }
-            : current,
-        );
-      }
-      if (key) {
-        queryClient.setQueryData<RecommendationsResponse>(["recommendations", "movies"], (current) =>
-          current
-            ? {
-                ...current,
-                results: current.results.map((result) =>
-                  result.key === key ? { ...result, inLibrary: true } : result,
-                ),
-              }
-            : current,
-        );
-      }
-      if (key) {
-        queryClient.setQueryData<DiscoverResponse>(["discover", "movies"], (current) =>
-          current
-            ? {
-                ...current,
-                rows: current.rows.map((row) => ({
-                  ...row,
-                  results: row.results.map((result) =>
-                    result.key === key ? { ...result, inLibrary: true } : result,
-                  ),
-                })),
-              }
-            : current,
-        );
-      }
-      void queryClient.invalidateQueries({ queryKey: ["search"] });
-      void queryClient.invalidateQueries({ queryKey: ["status"] });
-      void queryClient.invalidateQueries({ queryKey: ["activity"] });
-      void queryClient.invalidateQueries({ queryKey: ["requested-library"] });
-    },
-    onError: (error, { result }) => reportRequestError(result.key, error.message),
-  });
-
-  const requestingKey =
-    requestMutation.isPending && requestMutation.variables
-      ? requestKey(requestMutation.variables.input)
-      : null;
-
-  function reportRequestError(key: string, message: string) {
-    setRequestErrors((errors) => ({ ...errors, [key]: message }));
-  }
-
-  function handleRequest(result: SearchResult) {
-    if (requestMutation.isPending) return;
-    const service = result.kind === "movie" ? "radarr" : "sonarr";
-    const serviceOptions = optionsQuery.data?.services[service];
-    if (serviceOptions && serviceOptions.state !== "ok") {
-      reportRequestError(result.key, serviceOptions.detail ?? `${service === "sonarr" ? "Sonarr" : "Radarr"} is not ready.`);
-      return;
-    }
-
-    const serviceDefaults = defaults[service];
-    if (
-      serviceDefaults.qualityProfileId === undefined ||
-      !serviceDefaults.rootFolderPath
-    ) {
-      reportRequestError(result.key, "Choose a quality profile and root folder in Request options, then retry.");
-      return;
-    }
-
-    const input: CreateRequestInput = {
-      kind: result.kind,
-      options: {
-        qualityProfileId: serviceDefaults.qualityProfileId,
-        rootFolderPath: serviceDefaults.rootFolderPath,
-      },
-    };
-
-    if (result.kind === "movie") {
-      if (result.tmdbId === undefined) {
-        reportRequestError(result.key, "This movie cannot be requested because it has no TMDB ID.");
-        return;
-      }
-      input.tmdbId = result.tmdbId;
-    } else {
-      if (result.tvdbId === undefined) {
-        reportRequestError(result.key, "This series cannot be requested because it has no TVDB ID.");
-        return;
-      }
-      input.tvdbId = result.tvdbId;
-    }
-
-    setRequestErrors((errors) => {
-      const next = { ...errors };
-      delete next[result.key];
-      return next;
-    });
-    requestMutation.mutate({ input, result });
-  }
 
   const hasRecommendations =
     recommendationsQuery.isLoading ||
@@ -275,7 +120,7 @@ export function SearchSection() {
           requestingKey={requestingKey}
           requestLinks={requestLinks}
           requestErrors={requestErrors}
-          requestDisabled={optionsQuery.isLoading || requestMutation.isPending}
+          requestDisabled={requests.requestDisabled}
           isFavorite={taste.isFavorite}
           onToggleFavorite={taste.toggleFavorite}
           onDismiss={taste.hide}
@@ -289,7 +134,7 @@ export function SearchSection() {
           requestingKey={requestingKey}
           requestLinks={requestLinks}
           requestErrors={requestErrors}
-          requestDisabled={optionsQuery.isLoading || requestMutation.isPending}
+          requestDisabled={requests.requestDisabled}
           isFavorite={taste.isFavorite}
           onToggleFavorite={taste.toggleFavorite}
           onDismiss={taste.hide}
@@ -317,7 +162,7 @@ export function SearchSection() {
           requestErrors={requestErrors}
           onRequest={handleRequest}
           requestingKey={requestingKey}
-          requestDisabled={optionsQuery.isLoading || requestMutation.isPending}
+          requestDisabled={requests.requestDisabled}
           isFavorite={taste.isFavorite}
           onToggleFavorite={taste.toggleFavorite}
         />
@@ -358,13 +203,4 @@ function SearchServiceNotice({ service }: { service: SearchServiceState }) {
   );
 }
 
-function requestKey(input: CreateRequestInput): string | null {
-  if (input.kind === "movie") {
-    return input.tmdbId === undefined ? null : `movie:${input.tmdbId}`;
-  }
-  return input.tvdbId === undefined ? null : `series:${input.tvdbId}`;
-}
 
-function formatTitle(title: string, year?: number): string {
-  return year ? `${title} (${year})` : title;
-}

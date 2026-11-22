@@ -8,6 +8,8 @@ import { SearchResultCard } from "./SearchResultCard";
 /** Cards per row before "Show all": one row on wide screens. */
 const COLLAPSED_COUNT = 6;
 
+export type CardRowProps = Omit<DiscoverRowsProps, "data">;
+
 interface DiscoverRowsProps {
   data?: DiscoverResponse;
   onRequest: (result: SearchResult) => void;
@@ -38,7 +40,8 @@ export function DiscoverRows({ data, ...cardProps }: DiscoverRowsProps) {
   );
 }
 
-function DiscoverRowSection({
+/** One titled row of cards, one line deep until "Show all". */
+export function DiscoverRowSection({
   row,
   onRequest,
   requestingKey,
@@ -48,7 +51,7 @@ function DiscoverRowSection({
   isFavorite,
   onToggleFavorite,
   onDismiss,
-}: Omit<DiscoverRowsProps, "data"> & { row: DiscoverResponse["rows"][number] }) {
+}: CardRowProps & { row: DiscoverResponse["rows"][number] }) {
   const [expanded, setExpanded] = useState(false);
   const headingId = `discover-${row.id.replace(/[^a-z0-9-]/gi, "-")}`;
   const visible = expanded ? row.results : row.results.slice(0, COLLAPSED_COUNT);

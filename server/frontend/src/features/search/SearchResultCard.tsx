@@ -83,6 +83,13 @@ export function SearchResultCard({
             ) : null}
           </div>
         ) : null}
+        {result.radarrId !== undefined ? (
+          <a
+            href={`#/library/movie/radarr/${result.radarrId}`}
+            aria-label={`Open ${result.title}`}
+            className="absolute inset-0 z-[1] rounded-t-xl focus-visible:outline-2 focus-visible:outline-ring"
+          />
+        ) : null}
         {result.imageUrl ? (
           <MotionImage
             src={result.imageUrl}

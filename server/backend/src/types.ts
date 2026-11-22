@@ -261,6 +261,8 @@ export interface SearchResult {
   inLibrary: boolean | null;
   /** True when the arr has the movie file or every series episode. */
   available?: boolean;
+  /** Radarr's id when the movie is already in the library, for a link to its page. */
+  radarrId?: number;
   seasons?: Array<{ seasonNumber: number; monitored: boolean }>;
 }
 
