@@ -227,6 +227,10 @@ export function fetchMovieRecommendations(): Promise<RecommendationsResponse> {
   return getJson<RecommendationsResponse>("/api/recommendations/movies");
 }
 
+export function fetchSimilarMovies(tmdbId: number): Promise<RecommendationsResponse> {
+  return getJson<RecommendationsResponse>(`/api/recommendations/similar/${tmdbId}`);
+}
+
 export function fetchDiscoverMovies(): Promise<DiscoverResponse> {
   return getJson<DiscoverResponse>("/api/discover/movies");
 }

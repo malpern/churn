@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CircleAlertIcon } from "lucide-react";
 
 import { fetchMovie, fetchMovieDownload } from "@/api/client";
+import { MoreLikeThis } from "@/features/movie/MoreLikeThis";
 import type { ActivityItem } from "@/api/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -259,6 +260,8 @@ export function MoviePage({
               onCancelled={() => setPickerOpen(false)}
             />
           ) : null}
+
+          {movie.tmdbId !== undefined ? <MoreLikeThis tmdbId={movie.tmdbId} /> : null}
 
           <DeleteTitleDialog
             open={deleteOpen}
