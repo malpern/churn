@@ -28,9 +28,9 @@ const NAV_ITEMS = [
 
 export function AppHeader({ route }: AppHeaderProps) {
   const { session, logout, isPending } = useAuth();
-  const activePage = route.page === "show" || route.page === "movie" || route.page === "play" || route.page === "person"
-      ? "library"
-       : route.page;
+  const titlePage =
+    route.page === "show" || route.page === "movie" || route.page === "play" || route.page === "person";
+  const activePage = titlePage ? "library" : route.page;
   const { track, indicator, onClick } = useSelectionUnderline<HTMLElement>(activePage);
   const user = session?.user;
   const isAdmin = user?.isAdmin === true;
