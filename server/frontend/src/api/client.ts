@@ -6,6 +6,9 @@ import type {
 } from "@simplewebauthn/browser";
 
 import type {
+  CreditsResponse,
+  PersonResponse,
+  TmdbSettingsResponse,
   ActivityResponse,
   AuthSessionResponse,
   CancelJellyfinItemResponse,
@@ -276,6 +279,30 @@ export function hideRecommendation(movie: {
 
 export function unhideRecommendation(id: number): Promise<null> {
   return deleteJson<null>(`/api/recommendations/hidden/${id}`);
+}
+
+export function fetchCast(itemId: string): Promise<CreditsResponse> {
+  return getJson<CreditsResponse>(`/api/cast/${encodeURIComponent(itemId)}`);
+}
+
+export function fetchPerson(personId: string): Promise<PersonResponse> {
+  return getJson<PersonResponse>(`/api/person/${encodeURIComponent(personId)}`);
+}
+
+export function fetchTmdbSettings(): Promise<TmdbSettingsResponse> {
+  return getJson<TmdbSettingsResponse>("/api/settings/tmdb");
+}
+
+export function saveTmdbKey(apiKey: string): Promise<TmdbSettingsResponse> {
+  return requestJson<TmdbSettingsResponse>("/api/settings/tmdb", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ apiKey }),
+  });
+}
+
+export function removeTmdbKey(): Promise<TmdbSettingsResponse> {
+  return deleteJson<TmdbSettingsResponse>("/api/settings/tmdb");
 }
 
 export function fetchSearch(query: string): Promise<SearchResponse> {

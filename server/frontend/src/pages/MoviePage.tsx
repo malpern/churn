@@ -4,6 +4,7 @@ import { CircleAlertIcon } from "lucide-react";
 
 import { fetchMovie, fetchMovieDownload } from "@/api/client";
 import { MoreLikeThis } from "@/features/movie/MoreLikeThis";
+import { CastStrip } from "@/features/person/CastStrip";
 import { PartOfSeries } from "@/features/movie/PartOfSeries";
 import type { ActivityItem } from "@/api/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -262,6 +263,7 @@ export function MoviePage({
             />
           ) : null}
 
+          {jellyfinId !== undefined ? <CastStrip itemId={jellyfinId} /> : null}
           {movie.tmdbId !== undefined ? <PartOfSeries tmdbId={movie.tmdbId} /> : null}
           {movie.tmdbId !== undefined ? <MoreLikeThis tmdbId={movie.tmdbId} /> : null}
 
