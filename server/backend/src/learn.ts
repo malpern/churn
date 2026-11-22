@@ -30,6 +30,46 @@ export const LEARN_SUBJECTS: LearnSubject[] = [
 ];
 
 /**
+ * TMDB keywords whose documentaries are mostly speculation dressed as fact:
+ * ancient astronauts, ghosts, cryptids, conspiracy theories. Titles tagged
+ * with any of them are left out of the Learn page. Names, resolved at run time
+ * like the subjects' keywords.
+ */
+export const JUNK_KEYWORDS = [
+  "ancient aliens",
+  "ancient astronauts",
+  "pseudoscience",
+  "pseudohistory",
+  "conspiracy theory",
+  "paranormal",
+  "paranormal investigation",
+  "ghost hunting",
+  "ghost",
+  "haunted house",
+  "ufo",
+  "alien abduction",
+  "bigfoot",
+  "cryptozoology",
+  "psychic",
+  "supernatural",
+  "atlantis",
+  "flat earth",
+];
+
+/**
+ * The same idea for titles TMDB has not tagged: words in the title or
+ * overview that almost always mean speculation rather than evidence. Strict
+ * on purpose; the cost of a miss is one good film, the cost of a hit is the
+ * page's credibility.
+ */
+const JUNK_TEXT =
+  /\b(ancient (aliens?|astronauts?)|extraterrestrials? (built|helped|visited)|aliens? (built|helped)|pseudoscience|paranormal|haunt(ed|ings?)|ghosts?|poltergeists?|ufos?|uaps?|bigfoot|sasquatch|cryptids?|yeti|psychics?|flat[- ]earth|atlantis|nephilim|illuminati|reptilians?|chemtrails?|forbidden (history|archaeology))\b/i;
+
+export function looksLikeJunk(text: { title: string; overview?: string }): boolean {
+  return JUNK_TEXT.test(`${text.title} ${text.overview ?? ""}`);
+}
+
+/**
  * The keyword ids for one topic, from TMDB's search results: an exact name
  * match (ignoring case and a trailing "s") first, then names that start with
  * the topic. At most three, so a broad topic does not swamp a shelf.
@@ -66,12 +106,14 @@ export function qualityScore(title: Pick<TmdbTitle, "voteAverage" | "voteCount">
 
 /** Best first, one entry per title, nothing below the floor. */
 export function rankTitles(titles: TmdbTitle[], options: { limit: number; floor?: number }): TmdbTitle[] {
-  const floor = options.floor ?? 6.6;
+  const floor = options.floor ?? 6.8;
   const seen = new Set<string>();
   return titles
     .filter((title) => {
       const key = `${title.media}:${title.id}`;
-      if (seen.has(key) || title.voteCount < 3 || qualityScore(title) < floor) return false;
+      if (seen.has(key) || title.voteCount < 3 || qualityScore(title) < floor || looksLikeJunk(title)) {
+        return false;
+      }
       seen.add(key);
       return true;
     })

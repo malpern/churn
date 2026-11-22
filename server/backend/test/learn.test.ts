@@ -4,6 +4,7 @@ import {
   LEARN_SUBJECTS,
   chooseKeywordIds,
   dailySeed,
+  looksLikeJunk,
   mentionsTopic,
   pickExploration,
   qualityScore,
@@ -57,6 +58,35 @@ describe("ranking", () => {
       { limit: 10 },
     );
     expect(ranked.map((entry) => `${entry.media}:${entry.id}`)).toEqual(["movie:3", "tv:3", "movie:1"]);
+  });
+});
+
+describe("the junk filter", () => {
+  it("catches speculation dressed as history or science", () => {
+    for (const title of [
+      { title: "Ancient Aliens", overview: "Did extraterrestrials visit Earth?" },
+      { title: "The Pyramid Code", overview: "Were the pyramids built by aliens helped by a lost race?" },
+      { title: "Ghost Adventures" },
+      { title: "Finding Bigfoot", overview: "The hunt for the Sasquatch." },
+      { title: "Flat-Earth Rising" },
+      { title: "Atlantis Found" },
+    ]) {
+      expect(looksLikeJunk(title), title.title).toBe(true);
+    }
+  });
+  it("leaves real history and science alone", () => {
+    for (const title of [
+      { title: "Apollo 11", overview: "Footage of the first Moon landing." },
+      { title: "Secrets of the Great Pyramid", overview: "Archaeologists find the workers' village at Giza." },
+      { title: "My Octopus Teacher" },
+      { title: "Helvetica", overview: "A film about typography and graphic design." },
+    ]) {
+      expect(looksLikeJunk(title), title.title).toBe(false);
+    }
+  });
+  it("is applied when ranking", () => {
+    const junk = { ...title(9, 8.5, 5000), title: "Ancient Aliens" };
+    expect(rankTitles([junk, title(1, 7.4, 400)], { limit: 5 }).map((entry) => entry.id)).toEqual([1]);
   });
 });
 
