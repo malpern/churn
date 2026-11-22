@@ -898,3 +898,35 @@ export interface TmdbSettingsResponse {
    */
   suggest: boolean;
 }
+
+export interface LearnInterestsResponse {
+  text: string;
+  updatedAt?: string;
+  /** What churn read from the text; these steer the Learn page. */
+  topics: string[];
+}
+
+export type LearnState =
+  | "ok"
+  /** No TMDB key: only documentaries Radarr already suggests. */
+  | "no_key"
+  | "invalid_key"
+  | "unavailable";
+
+export interface LearnResponse {
+  state: LearnState;
+  interests: {
+    set: boolean;
+    topics: string[];
+    /** Topics TMDB had no keyword or no good documentaries for. */
+    unmatched: string[];
+  };
+  rows: DiscoverRow[];
+  subjects: Array<{ id: string; label: string }>;
+}
+
+export interface LearnSubjectResponse {
+  state: LearnState;
+  subject: { id: string; label: string };
+  rows: DiscoverRow[];
+}

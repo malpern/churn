@@ -72,7 +72,7 @@ export function SearchResultCard({
       aria-current={current ? "page" : undefined}
     >
       <div className="relative aspect-[2/3] bg-muted">
-        {onToggleFavorite || onDismiss ? (
+        {(onToggleFavorite || onDismiss) && result.kind === "movie" ? (
           <div className="absolute top-2 right-2 z-10 flex gap-1.5">
             {onToggleFavorite ? (
               <PosterAction

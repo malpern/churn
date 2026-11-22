@@ -102,3 +102,110 @@ export async function tmdbPersonMovies(
   }
   return merged.sort((a, b) => (b.vote_count ?? 0) - (a.vote_count ?? 0));
 }
+
+/** A movie or show from TMDB's discover, trending or search results. */
+export interface TmdbTitle {
+  id: number;
+  media: "movie" | "tv";
+  title: string;
+  /** YYYY-MM-DD; release date for movies, first air date for shows. */
+  date?: string;
+  overview?: string;
+  posterPath?: string;
+  voteAverage: number;
+  voteCount: number;
+  popularity: number;
+}
+
+interface TmdbListItem {
+  id: number;
+  title?: string;
+  name?: string;
+  release_date?: string;
+  first_air_date?: string;
+  overview?: string;
+  poster_path?: string | null;
+  vote_average?: number;
+  vote_count?: number;
+  popularity?: number;
+  adult?: boolean;
+}
+
+/** TMDB's genre id for documentaries, the same for movies and shows. */
+export const TMDB_DOCUMENTARY_GENRE = 99;
+
+function toTitle(item: TmdbListItem, media: "movie" | "tv"): TmdbTitle | null {
+  const title = (media === "movie" ? item.title : item.name)?.trim();
+  if (!Number.isSafeInteger(item.id) || !title || item.adult) return null;
+  const date = media === "movie" ? item.release_date : item.first_air_date;
+  return {
+    id: item.id,
+    media,
+    title,
+    ...(date ? { date } : {}),
+    ...(item.overview ? { overview: item.overview } : {}),
+    ...(item.poster_path ? { posterPath: item.poster_path } : {}),
+    voteAverage: item.vote_average ?? 0,
+    voteCount: item.vote_count ?? 0,
+    popularity: item.popularity ?? 0,
+  };
+}
+
+/** Keyword ids and names matching a search, TMDB's best matches first. */
+export async function tmdbSearchKeywords(
+  key: string,
+  query: string,
+  timeoutMs: number,
+): Promise<Array<{ id: number; name: string }>> {
+  const response = await tmdbGet<{ results?: Array<{ id: number; name: string }> }>(
+    key,
+    `/search/keyword?${new URLSearchParams({ query, page: "1" }).toString()}`,
+    timeoutMs,
+  );
+  return (response.results ?? []).filter((entry) => Number.isSafeInteger(entry.id) && entry.name);
+}
+
+export interface TmdbDiscoverOptions {
+  media: "movie" | "tv";
+  /** Any of these keywords (TMDB's OR). */
+  keywordIds?: number[];
+  sortBy: "popularity.desc" | "vote_average.desc" | "vote_count.desc";
+  minVotes?: number;
+  minAverage?: number;
+  /** Only titles released (or first aired) on or after this date. */
+  since?: string;
+}
+
+/** One page of documentaries from TMDB's discover. */
+export async function tmdbDiscoverDocumentaries(
+  key: string,
+  options: TmdbDiscoverOptions,
+  timeoutMs: number,
+): Promise<TmdbTitle[]> {
+  const query = new URLSearchParams({
+    with_genres: String(TMDB_DOCUMENTARY_GENRE),
+    sort_by: options.sortBy,
+    include_adult: "false",
+    page: "1",
+  });
+  if (options.keywordIds?.length) query.set("with_keywords", options.keywordIds.join("|"));
+  if (options.minVotes !== undefined) query.set("vote_count.gte", String(options.minVotes));
+  if (options.minAverage !== undefined) query.set("vote_average.gte", String(options.minAverage));
+  if (options.since) {
+    query.set(options.media === "movie" ? "primary_release_date.gte" : "first_air_date.gte", options.since);
+  }
+  const response = await tmdbGet<{ results?: TmdbListItem[] }>(
+    key,
+    `/discover/${options.media}?${query.toString()}`,
+    timeoutMs,
+  );
+  return (response.results ?? [])
+    .map((item) => toTitle(item, options.media))
+    .filter((title): title is TmdbTitle => title !== null);
+}
+
+/** The TVDB id Sonarr needs to add a show, or undefined when TMDB has none. */
+export async function tmdbTvdbId(key: string, tvId: number, timeoutMs: number): Promise<number | undefined> {
+  const response = await tmdbGet<{ tvdb_id?: number | null }>(key, `/tv/${tvId}/external_ids`, timeoutMs);
+  return typeof response.tvdb_id === "number" && response.tvdb_id > 0 ? response.tvdb_id : undefined;
+}

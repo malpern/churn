@@ -33,7 +33,7 @@ export function AppHeader({ route, onManagePasskeys }: AppHeaderProps) {
   const { available: passkeysAvailable } = usePasskeyAvailability();
   const titlePage =
     route.page === "show" || route.page === "movie" || route.page === "play" || route.page === "person";
-  const activePage = titlePage ? "library" : route.page;
+  const activePage = titlePage ? "library" : route.page === "learn" ? "search" : route.page;
   const { track, indicator, onClick } = useSelectionUnderline<HTMLElement>(activePage);
   const user = session?.user;
   const isAdmin = user?.isAdmin === true;

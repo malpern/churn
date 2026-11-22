@@ -13,6 +13,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { MoviePage } from "@/pages/MoviePage";
 import { PeoplePage } from "@/pages/PeoplePage";
 import { PersonPage } from "@/pages/PersonPage";
+import { LearnPage } from "@/pages/LearnPage";
 import { RecommendationsPage } from "@/pages/RecommendationsPage";
 import { PlayPage } from "@/pages/PlayPage";
 import { SearchPage } from "@/pages/SearchPage";
@@ -108,6 +109,7 @@ function Dashboard({ onManagePasskeys }: { onManagePasskeys: () => void }) {
         {route.page === "recommendations" ? <RecommendationsPage /> : null}
         {route.page === "settings" && isAdmin ? <SettingsPage /> : null}
         {route.page === "person" ? <PersonPage key={route.id} id={route.id} /> : null}
+        {route.page === "learn" ? <LearnPage subject={route.subject} /> : null}
         {route.page === "play" ? (
           <PlayPage
             key={route.id}

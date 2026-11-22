@@ -32,10 +32,12 @@ import { registerProfileRoutes } from "./routes/profiles.js";
 import { registerRequestRoutes } from "./routes/requests.js";
 import { registerRequestedLibraryRoutes } from "./routes/requested.js";
 import { registerSearchRoutes } from "./routes/search.js";
+import { registerLearnRoutes } from "./routes/learn.js";
 import { registerPersonRoutes } from "./routes/person.js";
 import { registerRecommendationRoutes } from "./routes/recommendations.js";
 import { createFavoriteStore } from "./recommendation-favorites.js";
 import { createTmdbKeyStore } from "./tmdb-key.js";
+import { createLearningInterestStore } from "./learning-interests.js";
 import { registerServiceRoutes } from "./routes/services.js";
 import { registerShowRoutes } from "./routes/shows.js";
 import { registerStatsRoutes } from "./routes/stats.js";
@@ -81,6 +83,10 @@ export async function buildServer(
     onWarning: (message) => app.log.warn(message),
   });
   const tmdbKey = createTmdbKeyStore({
+    stateDir: config.stateDir,
+    onWarning: (message) => app.log.warn(message),
+  });
+  const learningInterests = createLearningInterestStore({
     stateDir: config.stateDir,
     onWarning: (message) => app.log.warn(message),
   });
@@ -204,6 +210,7 @@ export async function buildServer(
   registerSearchRoutes(app, config);
   registerRecommendationRoutes(app, config, favorites);
   registerPersonRoutes(app, config, tmdbKey);
+  registerLearnRoutes(app, config, tmdbKey, learningInterests);
   registerRequestRoutes(app, config, mediaCache, releaseSearch, mediaAttribution);
   registerActivityRoutes(app, config, releaseEvents);
   registerShowRoutes(app, config, releaseSearch, introDb);
