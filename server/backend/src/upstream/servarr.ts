@@ -117,6 +117,19 @@ export interface ServarrRecommendedMovie extends ServarrMovieResource {
   /** On Radarr's import-list exclusion list. */
   isExcluded?: boolean;
   isRecommendation?: boolean;
+  isTrending?: boolean;
+  isPopular?: boolean;
+  /** Ids of the import lists this movie came from. */
+  lists?: number[];
+  popularity?: number;
+}
+
+/** An import list configured in Radarr; with auto-add off it only feeds Discover. */
+export interface ServarrImportList {
+  id: number;
+  name?: string;
+  enabled?: boolean;
+  enableAuto?: boolean;
 }
 
 /** A movie Radarr will never suggest or import from a list again. */
@@ -373,12 +386,31 @@ export function createArrClient(service: ArrServiceId, config: ServiceConfig, ti
      * no account or key beyond Radarr's.
      */
     async listMovieRecommendations(): Promise<ServarrRecommendedMovie[]> {
+      return get<ServarrRecommendedMovie[]>(
+        "/api/v3/importlist/movie?includeRecommendations=true&includeTrending=false&includePopular=false",
+      );
+    },
+
+    /**
+     * Radarr's Discover feed: its library-based recommendations, trending and
+     * popular movies from its metadata service, and the movies of every import
+     * list, each tagged with the ids of the lists it came from.
+     */
+    async listDiscoverMovies(include: {
+      recommendations?: boolean;
+      trending?: boolean;
+      popular?: boolean;
+    }): Promise<ServarrRecommendedMovie[]> {
       const query = new URLSearchParams({
-        includeRecommendations: "true",
-        includeTrending: "false",
-        includePopular: "false",
+        includeRecommendations: String(include.recommendations ?? false),
+        includeTrending: String(include.trending ?? false),
+        includePopular: String(include.popular ?? false),
       });
       return get<ServarrRecommendedMovie[]>(`/api/v3/importlist/movie?${query.toString()}`);
+    },
+
+    async listImportLists(): Promise<ServarrImportList[]> {
+      return get<ServarrImportList[]>("/api/v3/importlist");
     },
 
     async getIndexers(): Promise<ServarrIndexer[]> {
@@ -533,8 +565,18 @@ export function createArrClient(service: ArrServiceId, config: ServiceConfig, ti
       return getLookup<ServarrMovieResource>(`/api/v3/movie/lookup/tmdb?tmdbId=${tmdbId}`);
     },
 
+    /** Every exclusion, read page by page (Radarr deprecated the unpaged list). */
     async listExclusions(): Promise<ServarrExclusion[]> {
-      return get<ServarrExclusion[]>("/api/v3/exclusions");
+      const all: ServarrExclusion[] = [];
+      for (let page = 1; page <= 50; page += 1) {
+        const result = await get<{ totalRecords?: number; records?: ServarrExclusion[] }>(
+          `/api/v3/exclusions/paged?page=${page}&pageSize=250&sortKey=id&sortDirection=ascending`,
+        );
+        const records = result.records ?? [];
+        all.push(...records);
+        if (records.length === 0 || all.length >= (result.totalRecords ?? 0)) break;
+      }
+      return all;
     },
 
     async addExclusion(exclusion: {

@@ -326,6 +326,20 @@ export interface RecommendationsResponse {
   results: SearchResult[];
 }
 
+export interface DiscoverRow {
+  /** "trending", "popular", or "list:<Radarr import list id>". */
+  id: string;
+  title: string;
+  subtitle?: string;
+  results: SearchResult[];
+}
+
+export interface DiscoverResponse {
+  state: ArrServiceState;
+  detail?: string;
+  rows: DiscoverRow[];
+}
+
 export interface FavoriteMovieSummary {
   tmdbId: number;
   title: string;

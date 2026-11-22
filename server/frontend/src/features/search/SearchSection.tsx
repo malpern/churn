@@ -6,11 +6,13 @@ import { toast } from "sonner";
 import {
   createRequest,
   fetchRequestOptions,
+  fetchDiscoverMovies,
   fetchMovieRecommendations,
   fetchSearch,
 } from "@/api/client";
 import type {
   CreateRequestInput,
+  DiscoverResponse,
   RecommendationsResponse,
   SearchResponse,
   SearchResult,
@@ -31,6 +33,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 
+import { DiscoverRows } from "@/features/search/DiscoverRows";
 import { RecommendedMovies } from "@/features/search/RecommendedMovies";
 import { useRecommendationPreferences } from "@/features/search/use-recommendation-preferences";
 import { SearchResults, SearchResultsSkeleton } from "@/features/search/SearchResults";
@@ -73,6 +76,12 @@ export function SearchSection() {
   const recommendationsQuery = useQuery({
     queryKey: ["recommendations", "movies"],
     queryFn: fetchMovieRecommendations,
+    staleTime: 10 * 60_000,
+  });
+
+  const discoverQuery = useQuery({
+    queryKey: ["discover", "movies"],
+    queryFn: fetchDiscoverMovies,
     staleTime: 10 * 60_000,
   });
 
@@ -126,6 +135,21 @@ export function SearchSection() {
                 results: current.results.map((result) =>
                   result.key === key ? { ...result, inLibrary: true } : result,
                 ),
+              }
+            : current,
+        );
+      }
+      if (key) {
+        queryClient.setQueryData<DiscoverResponse>(["discover", "movies"], (current) =>
+          current
+            ? {
+                ...current,
+                rows: current.rows.map((row) => ({
+                  ...row,
+                  results: row.results.map((result) =>
+                    result.key === key ? { ...result, inLibrary: true } : result,
+                  ),
+                })),
               }
             : current,
         );
@@ -197,7 +221,9 @@ export function SearchSection() {
 
   const hasRecommendations =
     recommendationsQuery.isLoading ||
-    (recommendationsQuery.data?.state === "ok" && recommendationsQuery.data.results.length > 0);
+    discoverQuery.isLoading ||
+    (recommendationsQuery.data?.state === "ok" && recommendationsQuery.data.results.length > 0) ||
+    (discoverQuery.data?.state === "ok" && discoverQuery.data.rows.length > 0);
   const searchData = searchQuery.data;
   const results = searchData?.results ?? [];
   const serviceNotices = searchData?.services.filter(
@@ -245,6 +271,20 @@ export function SearchSection() {
         <RecommendedMovies
           data={recommendationsQuery.data}
           loading={recommendationsQuery.isLoading}
+          onRequest={handleRequest}
+          requestingKey={requestingKey}
+          requestLinks={requestLinks}
+          requestErrors={requestErrors}
+          requestDisabled={optionsQuery.isLoading || requestMutation.isPending}
+          isFavorite={taste.isFavorite}
+          onToggleFavorite={taste.toggleFavorite}
+          onDismiss={taste.hide}
+        />
+      ) : null}
+
+      {!searchEnabled ? (
+        <DiscoverRows
+          data={discoverQuery.data}
           onRequest={handleRequest}
           requestingKey={requestingKey}
           requestLinks={requestLinks}
