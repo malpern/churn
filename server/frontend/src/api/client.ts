@@ -7,6 +7,9 @@ import type {
 
 import type {
   CreditsResponse,
+  LearnInterestsResponse,
+  LearnResponse,
+  LearnSubjectResponse,
   PersonResponse,
   TmdbSettingsResponse,
   ActivityResponse,
@@ -296,6 +299,26 @@ export function saveTmdbKey(apiKey: string): Promise<TmdbSettingsResponse> {
 
 export function removeTmdbKey(): Promise<TmdbSettingsResponse> {
   return deleteJson<TmdbSettingsResponse>("/api/settings/tmdb");
+}
+
+export function fetchLearn(): Promise<LearnResponse> {
+  return getJson<LearnResponse>("/api/learn");
+}
+
+export function fetchLearnSubject(subjectId: string): Promise<LearnSubjectResponse> {
+  return getJson<LearnSubjectResponse>(`/api/learn/subjects/${encodeURIComponent(subjectId)}`);
+}
+
+export function fetchLearnInterests(): Promise<LearnInterestsResponse> {
+  return getJson<LearnInterestsResponse>("/api/learn/interests");
+}
+
+export function saveLearnInterests(text: string): Promise<LearnInterestsResponse> {
+  return requestJson<LearnInterestsResponse>("/api/learn/interests", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
 }
 
 export function fetchSearch(query: string): Promise<SearchResponse> {

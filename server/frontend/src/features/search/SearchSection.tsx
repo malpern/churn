@@ -33,6 +33,7 @@ import { SearchResults, SearchResultsSkeleton } from "@/features/search/SearchRe
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useTitleRequests } from "@/features/search/use-title-requests";
 import { TmdbSuggestion } from "@/features/person/TmdbSuggestion";
+import { LearnTile } from "@/features/learn/LearnTile";
 
 
 export function SearchSection() {
@@ -127,6 +128,8 @@ export function SearchSection() {
           onDismiss={taste.hide}
         />
       ) : null}
+
+      {!searchEnabled ? <LearnTile /> : null}
 
       {!searchEnabled ? (
         <DiscoverRows

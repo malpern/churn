@@ -9,6 +9,7 @@ import { clearServiceIconCache } from "../src/service-icons.js";
 import { clearRecommendationCache } from "../src/routes/recommendations.js";
 import { clearMetadataCache } from "../src/radarr-metadata.js";
 import { clearPersonCache } from "../src/routes/person.js";
+import { clearLearnCache } from "../src/routes/learn.js";
 
 let testServerCounter = 0;
 
@@ -2274,6 +2275,187 @@ describe("cast, person pages and the TMDB key", () => {
       configured: false,
       suggest: true,
     });
+    await app.close();
+  });
+});
+
+describe("the Learn page", () => {
+  const topicsText = "I like making things.\n\nTopics: keyboards, baseball, zzz unknown\n";
+
+  function docs(start: number, count: number, extra: Record<string, unknown> = {}) {
+    return Array.from({ length: count }, (_, index) => ({
+      id: start + index,
+      title: `Doc ${start + index}`,
+      name: `Series ${start + index}`,
+      release_date: "2020-01-01",
+      first_air_date: "2019-01-01",
+      poster_path: `/p${start + index}.jpg`,
+      vote_average: 7.8,
+      vote_count: 800,
+      popularity: 10,
+      ...extra,
+    }));
+  }
+
+  function learnFetch(options: { tmdb?: boolean } = {}) {
+    const keywordIds: Record<string, number> = {};
+    const tmdbPaths: string[] = [];
+    return {
+      tmdbPaths,
+      mock: installFetch((url) => {
+        if (url.startsWith("https://api.themoviedb.org/3/")) {
+          if (options.tmdb === false) return jsonResponse({}, 500);
+          const parsed = new URL(url);
+          tmdbPaths.push(parsed.pathname + parsed.search);
+          if (parsed.pathname === "/3/configuration") return jsonResponse({});
+          if (parsed.pathname === "/3/search/keyword") {
+            const query = parsed.searchParams.get("query") ?? "";
+            if (query.startsWith("zzz")) return jsonResponse({ results: [] });
+            keywordIds[query] ??= 100 + Object.keys(keywordIds).length;
+            return jsonResponse({ results: [{ id: keywordIds[query], name: query }] });
+          }
+          if (parsed.pathname === "/3/tv/77/external_ids") return jsonResponse({ tvdb_id: 7777 });
+          if (parsed.pathname.startsWith("/3/tv/") && parsed.pathname.endsWith("/external_ids")) {
+            return jsonResponse({ tvdb_id: null });
+          }
+          if (parsed.pathname.startsWith("/3/discover/")) {
+            const tv = parsed.pathname.endsWith("/tv");
+            const keywords = parsed.searchParams.get("with_keywords");
+            expect(parsed.searchParams.get("with_genres")).toBe("99");
+            if (keywords === String(keywordIds.keyboards)) {
+              return jsonResponse({
+                results: tv ? [...docs(77, 1), ...docs(78, 1)] : [...docs(101, 6), { ...docs(120, 1)[0], vote_count: 2 }],
+              });
+            }
+            if (keywords === String(keywordIds.baseball)) {
+              return jsonResponse({ results: tv ? [] : docs(201, 2) });
+            }
+            return jsonResponse({ results: tv ? [] : docs(keywords ? 300 + Number(keywords.split("|")[0]) * 10 : 900, 5) });
+          }
+          return jsonResponse({}, 404);
+        }
+        if (url.startsWith("http://radarr.test:7878/api/v3/movie")) {
+          return jsonResponse([{ id: 9, tmdbId: 101, title: "Doc 101", hasFile: true }]);
+        }
+        if (url.startsWith("http://radarr.test:7878/api/v3/exclusions")) {
+          return jsonResponse({ records: [{ id: 1, tmdbId: 102, movieTitle: "Doc 102" }] });
+        }
+        if (url.startsWith("http://radarr.test:7878/api/v3/importlist/movie")) {
+          return jsonResponse([
+            { tmdbId: 501, title: "Big Action", genres: ["Action"] },
+            { tmdbId: 502, title: "Ocean Stories", genres: ["Documentary"], overview: "Whales." },
+            { tmdbId: 503, title: "The Keyboard Wars", genres: ["Documentary"], overview: "Typing." },
+          ]);
+        }
+        if (url.startsWith("http://sonarr.test:8989/api/v3/series")) {
+          return jsonResponse([{ id: 5, tvdbId: 7777, title: "Series 77", statistics: { totalEpisodeCount: 2, episodeFileCount: 2 } }]);
+        }
+        return jsonResponse({}, 404);
+      }),
+    };
+  }
+
+  it("keeps each person's interests and shows the topics read from them", async () => {
+    clearLearnCache();
+    learnFetch();
+    const app = await buildAuthedServer(makeConfig());
+    expect((await app.inject({ method: "GET", url: "/api/learn/interests" })).json()).toEqual({ text: "", topics: [] });
+    const saved = await app.inject({ method: "PUT", url: "/api/learn/interests", payload: { text: `  ${topicsText}` } });
+    expect(saved.json()).toMatchObject({ text: topicsText.trim(), topics: ["keyboards", "baseball", "zzz unknown"] });
+    const tooLong = await app.inject({ method: "PUT", url: "/api/learn/interests", payload: { text: "x".repeat(8_001) } });
+    expect(tooLong.statusCode).toBe(400);
+    const cleared = await app.inject({ method: "PUT", url: "/api/learn/interests", payload: { text: "   " } });
+    expect(cleared.json()).toEqual({ text: "", topics: [] });
+    await app.close();
+  });
+
+  it("without a TMDB key, shows the documentaries Radarr suggests, matching ones first", async () => {
+    clearLearnCache();
+    const { tmdbPaths } = learnFetch();
+    const app = await buildAuthedServer(makeConfig());
+    await app.inject({ method: "PUT", url: "/api/learn/interests", payload: { text: topicsText } });
+    const body = (await app.inject({ method: "GET", url: "/api/learn" })).json();
+    expect(body.state).toBe("no_key");
+    expect(body.subjects).toEqual([]);
+    expect(body.rows).toHaveLength(1);
+    expect(body.rows[0].results.map((result: { title: string }) => result.title)).toEqual([
+      "The Keyboard Wars",
+      "Ocean Stories",
+    ]);
+    expect(tmdbPaths).toEqual([]);
+    await app.close();
+  });
+
+  it("with a key, builds a shelf per interest, then popular, acclaimed and one new subject", async () => {
+    clearLearnCache();
+    const { tmdbPaths } = learnFetch();
+    const app = await buildAuthedServer(makeConfig());
+    await app.inject({ method: "PUT", url: "/api/settings/tmdb", payload: { apiKey: "good-key" } });
+    await app.inject({ method: "PUT", url: "/api/learn/interests", payload: { text: topicsText } });
+
+    const body = (await app.inject({ method: "GET", url: "/api/learn" })).json();
+    expect(body.state).toBe("ok");
+    // Baseball had only two good titles and zzz no keyword: neither gets a shelf.
+    expect(body.interests).toEqual({
+      set: true,
+      topics: ["keyboards", "baseball", "zzz unknown"],
+      unmatched: ["baseball", "zzz unknown"],
+    });
+    const titles = body.rows.map((row: { title: string }) => row.title);
+    expect(titles[0]).toBe("Because you’re into keyboards");
+    expect(titles).toContain("Popular right now");
+    expect(titles).toContain("Acclaimed");
+    expect(titles.some((value: string) => value.startsWith("Outside your usual: "))).toBe(true);
+
+    const shelf = body.rows[0].results;
+    const keys = shelf.map((result: { key: string }) => result.key);
+    // Owned movie marked, excluded movie dropped, low-vote movie dropped,
+    // show resolved to its TVDB id, show without one left out.
+    expect(shelf.find((result: { key: string }) => result.key === "movie:101")).toMatchObject({
+      inLibrary: true,
+      available: true,
+      radarrId: 9,
+    });
+    expect(keys).not.toContain("movie:102");
+    expect(keys).not.toContain("movie:120");
+    expect(shelf.find((result: { key: string }) => result.key === "series:7777")).toMatchObject({
+      kind: "series",
+      inLibrary: true,
+      available: true,
+      title: "Series 77",
+    });
+    expect(keys.filter((key: string) => key.startsWith("series:"))).toEqual(["series:7777"]);
+    expect(body.subjects.length).toBeGreaterThan(5);
+
+    // Only topic words and subject keywords were searched for; never the text itself.
+    const searched = tmdbPaths
+      .filter((path) => path.startsWith("/3/search/keyword"))
+      .map((path) => new URLSearchParams(path.split("?")[1]).get("query"));
+    expect(searched).not.toContain(topicsText);
+    expect(searched).toContain("keyboards");
+
+    // A second visit is served from cache.
+    const before = tmdbPaths.length;
+    await app.inject({ method: "GET", url: "/api/learn" });
+    expect(tmdbPaths.length).toBe(before);
+
+    const subject = (await app.inject({ method: "GET", url: "/api/learn/subjects/science" })).json();
+    expect(subject.state).toBe("ok");
+    expect(subject.subject).toEqual({ id: "science", label: "Science" });
+    expect(subject.rows[0].title).toBe("Acclaimed: Science");
+    expect((await app.inject({ method: "GET", url: "/api/learn/subjects/nope" })).statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("reports TMDB being down instead of failing the page", async () => {
+    clearLearnCache();
+    learnFetch();
+    const app = await buildAuthedServer(makeConfig());
+    await app.inject({ method: "PUT", url: "/api/settings/tmdb", payload: { apiKey: "good-key" } });
+    clearLearnCache();
+    learnFetch({ tmdb: false });
+    const body = (await app.inject({ method: "GET", url: "/api/learn" })).json();
+    expect(body).toMatchObject({ state: "unavailable", rows: [] });
     await app.close();
   });
 });
