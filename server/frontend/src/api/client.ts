@@ -34,6 +34,7 @@ import type {
   PlaybackReport,
   RequestedLibraryResponse,
   RequestOptionsResponse,
+  DiscoverResponse,
   FavoriteMovieSummary,
   HiddenMovie,
   RecommendationPreferences,
@@ -224,6 +225,10 @@ export function cancelEpisodeDownload(
 
 export function fetchMovieRecommendations(): Promise<RecommendationsResponse> {
   return getJson<RecommendationsResponse>("/api/recommendations/movies");
+}
+
+export function fetchDiscoverMovies(): Promise<DiscoverResponse> {
+  return getJson<DiscoverResponse>("/api/discover/movies");
 }
 
 export function fetchRecommendationPreferences(): Promise<RecommendationPreferences> {

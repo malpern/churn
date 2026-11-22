@@ -1875,8 +1875,8 @@ describe("movie recommendations", () => {
       if (url === "http://radarr.test:7878/api/v3/movie") {
         return jsonResponse([{ id: 1, tmdbId: 12154, title: "3 Men and a Baby" }]);
       }
-      if (url === "http://radarr.test:7878/api/v3/exclusions") {
-        return jsonResponse([]);
+      if (url.startsWith("http://radarr.test:7878/api/v3/exclusions/paged?")) {
+        return jsonResponse({ totalRecords: 0, records: [] });
       }
       return jsonResponse({}, 404);
     });
@@ -1908,8 +1908,11 @@ describe("movie recommendations", () => {
     const calls: string[] = [];
     installFetch((url, init) => {
       const method = init?.method ?? "GET";
-      if (url === "http://radarr.test:7878/api/v3/exclusions" && method === "GET") {
-        return jsonResponse([{ id: 7, tmdbId: 426, movieTitle: "Vertigo", movieYear: 1958 }]);
+      if (url.startsWith("http://radarr.test:7878/api/v3/exclusions/paged?") && method === "GET") {
+        return jsonResponse({
+          totalRecords: 1,
+          records: [{ id: 7, tmdbId: 426, movieTitle: "Vertigo", movieYear: 1958 }],
+        });
       }
       if (url === "http://radarr.test:7878/api/v3/exclusions" && method === "POST") {
         calls.push(`POST ${String(init?.body)}`);
@@ -1945,6 +1948,41 @@ describe("movie recommendations", () => {
     const restored = await app.inject({ method: "DELETE", url: "/api/recommendations/hidden/8" });
     expect(restored.statusCode).toBe(204);
     expect(calls).toContain("DELETE 8");
+    await app.close();
+  });
+
+  it("serves Radarr's Discover feed as rows, named after Radarr's lists", async () => {
+    clearRecommendationCache();
+    installFetch((url) => {
+      if (url.startsWith("http://radarr.test:7878/api/v3/importlist/movie?")) {
+        expect(url).toContain("includeTrending=true");
+        expect(url).toContain("includePopular=true");
+        expect(url).toContain("includeRecommendations=false");
+        return jsonResponse([
+          { tmdbId: 1, title: "Dune: Part Three", isTrending: true, popularity: 80 },
+          { tmdbId: 2, title: "The Odyssey", isPopular: true, popularity: 60 },
+          { tmdbId: 3, title: "Possession", lists: [4], popularity: 3 },
+        ]);
+      }
+      if (url === "http://radarr.test:7878/api/v3/importlist") {
+        return jsonResponse([{ id: 4, name: "Midnight Movies", enabled: true, enableAuto: false }]);
+      }
+      return jsonResponse({}, 404);
+    });
+    const app = await buildAuthedServer(makeConfig());
+    const response = await app.inject({ method: "GET", url: "/api/discover/movies" });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      response.json().rows.map((row: { title: string; results: Array<{ title: string }> }) => [
+        row.title,
+        row.results.map((result) => result.title),
+      ]),
+    ).toEqual([
+      ["Trending now", ["Dune: Part Three"]],
+      ["Popular", ["The Odyssey"]],
+      ["Midnight Movies", ["Possession"]],
+    ]);
     await app.close();
   });
 
