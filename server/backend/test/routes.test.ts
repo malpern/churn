@@ -2300,8 +2300,11 @@ describe("the Learn page", () => {
   function learnFetch(options: { tmdb?: boolean } = {}) {
     const keywordIds: Record<string, number> = {};
     const tmdbPaths: string[] = [];
+    const discoverQueries: URLSearchParams[] = [];
     return {
       tmdbPaths,
+      discoverQueries,
+      keywordIds,
       mock: installFetch((url) => {
         if (url.startsWith("https://api.themoviedb.org/3/")) {
           if (options.tmdb === false) return jsonResponse({}, 500);
@@ -2322,9 +2325,16 @@ describe("the Learn page", () => {
             const tv = parsed.pathname.endsWith("/tv");
             const keywords = parsed.searchParams.get("with_keywords");
             expect(parsed.searchParams.get("with_genres")).toBe("99");
+            discoverQueries.push(parsed.searchParams);
             if (keywords === String(keywordIds.keyboards)) {
               return jsonResponse({
-                results: tv ? [...docs(77, 1), ...docs(78, 1)] : [...docs(101, 6), { ...docs(120, 1)[0], vote_count: 2 }],
+                results: tv
+                  ? [...docs(77, 1), ...docs(78, 1)]
+                  : [
+                      ...docs(101, 6),
+                      { ...docs(120, 1)[0], vote_count: 2 },
+                      { ...docs(130, 1)[0], title: "Ancient Aliens: Keyboards of the Gods", vote_count: 9000 },
+                    ],
               });
             }
             if (keywords === String(keywordIds.baseball)) {
@@ -2388,7 +2398,7 @@ describe("the Learn page", () => {
 
   it("with a key, builds a shelf per interest, then popular, acclaimed and one new subject", async () => {
     clearLearnCache();
-    const { tmdbPaths } = learnFetch();
+    const { tmdbPaths, discoverQueries, keywordIds } = learnFetch();
     const app = await buildAuthedServer(makeConfig());
     await app.inject({ method: "PUT", url: "/api/settings/tmdb", payload: { apiKey: "good-key" } });
     await app.inject({ method: "PUT", url: "/api/learn/interests", payload: { text: topicsText } });
@@ -2418,6 +2428,7 @@ describe("the Learn page", () => {
     });
     expect(keys).not.toContain("movie:102");
     expect(keys).not.toContain("movie:120");
+    expect(keys).not.toContain("movie:130");
     expect(shelf.find((result: { key: string }) => result.key === "series:7777")).toMatchObject({
       kind: "series",
       inLibrary: true,
@@ -2426,6 +2437,12 @@ describe("the Learn page", () => {
     });
     expect(keys.filter((key: string) => key.startsWith("series:"))).toEqual(["series:7777"]);
     expect(body.subjects.length).toBeGreaterThan(5);
+
+    // Every discover call leaves out reality/talk/news shows, horror, and junk keywords.
+    for (const query of discoverQueries) {
+      expect(query.get("without_genres")).toMatch(/^(27|10763,10764,10766,10767)$/);
+      expect(query.get("without_keywords")?.split(",")).toContain(String(keywordIds["ancient aliens"]));
+    }
 
     // Only topic words and subject keywords were searched for; never the text itself.
     const searched = tmdbPaths
