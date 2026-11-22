@@ -34,6 +34,9 @@ import type {
   PlaybackReport,
   RequestedLibraryResponse,
   RequestOptionsResponse,
+  FavoriteMovieSummary,
+  HiddenMovie,
+  RecommendationPreferences,
   RecommendationsResponse,
   SearchResponse,
   ShowDetailResponse,
@@ -221,6 +224,37 @@ export function cancelEpisodeDownload(
 
 export function fetchMovieRecommendations(): Promise<RecommendationsResponse> {
   return getJson<RecommendationsResponse>("/api/recommendations/movies");
+}
+
+export function fetchRecommendationPreferences(): Promise<RecommendationPreferences> {
+  return getJson<RecommendationPreferences>("/api/recommendations/preferences");
+}
+
+export function addFavoriteMovie(
+  movie: FavoriteMovieSummary,
+): Promise<{ favorites: FavoriteMovieSummary[] }> {
+  const { tmdbId, ...body } = movie;
+  return requestJson(`/api/recommendations/favorites/${tmdbId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function removeFavoriteMovie(tmdbId: number): Promise<{ favorites: FavoriteMovieSummary[] }> {
+  return deleteJson(`/api/recommendations/favorites/${tmdbId}`);
+}
+
+export function hideRecommendation(movie: {
+  tmdbId: number;
+  title: string;
+  year?: number;
+}): Promise<HiddenMovie> {
+  return postJson<HiddenMovie>("/api/recommendations/hidden", movie);
+}
+
+export function unhideRecommendation(id: number): Promise<null> {
+  return deleteJson<null>(`/api/recommendations/hidden/${id}`);
 }
 
 export function fetchSearch(query: string): Promise<SearchResponse> {

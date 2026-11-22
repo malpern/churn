@@ -7,6 +7,7 @@ import type { AppConfig } from "../src/config.js";
 import { buildServer } from "../src/server.js";
 import { clearServiceIconCache } from "../src/service-icons.js";
 import { clearRecommendationCache } from "../src/routes/recommendations.js";
+import { clearMetadataCache } from "../src/radarr-metadata.js";
 
 let testServerCounter = 0;
 
@@ -1849,6 +1850,101 @@ describe("movie recommendations", () => {
       "Twins",
     ]);
     expect(body.results[0]).toMatchObject({ key: "movie:489", kind: "movie", inLibrary: false });
+    await app.close();
+  });
+
+  it("adds a favourite's own suggestions, and never suggests the favourite itself", async () => {
+    clearRecommendationCache();
+    clearMetadataCache();
+    installFetch((url) => {
+      if (url.startsWith("http://radarr.test:7878/api/v3/importlist/movie?")) {
+        return jsonResponse([
+          { tmdbId: 9493, title: "Twins", genres: ["Comedy"], ratings: { tmdb: { value: 9 } } },
+          { tmdbId: 949, title: "Heat", genres: ["Crime"], ratings: { tmdb: { value: 8 } } },
+        ]);
+      }
+      if (url === "https://api.radarr.video/v1/movie/949") {
+        return jsonResponse({ Recommendations: [{ TmdbId: 680 }, { TmdbId: 12154 }] });
+      }
+      if (url === "http://radarr.test:7878/api/v3/movie/lookup/tmdb?tmdbId=680") {
+        return jsonResponse({ tmdbId: 680, title: "Pulp Fiction", genres: ["Crime"], ratings: { tmdb: { value: 8.5 } } });
+      }
+      if (url === "http://radarr.test:7878/api/v3/movie/lookup/tmdb?tmdbId=12154") {
+        return jsonResponse({ tmdbId: 12154, title: "3 Men and a Baby", genres: ["Comedy"] });
+      }
+      if (url === "http://radarr.test:7878/api/v3/movie") {
+        return jsonResponse([{ id: 1, tmdbId: 12154, title: "3 Men and a Baby" }]);
+      }
+      if (url === "http://radarr.test:7878/api/v3/exclusions") {
+        return jsonResponse([]);
+      }
+      return jsonResponse({}, 404);
+    });
+    const app = await buildAuthedServer(makeConfig());
+    const favourite = await app.inject({
+      method: "PUT",
+      url: "/api/recommendations/favorites/949",
+      payload: { title: "Heat", year: 1995, genres: ["Crime"], imageUrl: "https://evil.test/x.jpg" },
+    });
+    expect(favourite.statusCode).toBe(200);
+    expect(favourite.json().favorites).toEqual([
+      { tmdbId: 949, title: "Heat", year: 1995, genres: ["Crime"] },
+    ]);
+
+    const response = await app.inject({ method: "GET", url: "/api/recommendations/movies" });
+    // Pulp Fiction came from the favourite; Heat is the favourite; 3 Men is owned.
+    expect(response.json().results.map((result: { title: string }) => result.title)).toEqual([
+      "Pulp Fiction",
+      "Twins",
+    ]);
+
+    const preferences = await app.inject({ method: "GET", url: "/api/recommendations/preferences" });
+    expect(preferences.json()).toMatchObject({ favorites: [{ tmdbId: 949 }], hidden: [], hiddenState: "ok" });
+    await app.close();
+  });
+
+  it("hides a movie through a Radarr exclusion and brings it back", async () => {
+    clearRecommendationCache();
+    const calls: string[] = [];
+    installFetch((url, init) => {
+      const method = init?.method ?? "GET";
+      if (url === "http://radarr.test:7878/api/v3/exclusions" && method === "GET") {
+        return jsonResponse([{ id: 7, tmdbId: 426, movieTitle: "Vertigo", movieYear: 1958 }]);
+      }
+      if (url === "http://radarr.test:7878/api/v3/exclusions" && method === "POST") {
+        calls.push(`POST ${String(init?.body)}`);
+        return jsonResponse({ id: 8, tmdbId: 489, movieTitle: "Good Will Hunting", movieYear: 1997 });
+      }
+      if (url === "http://radarr.test:7878/api/v3/exclusions/8" && method === "DELETE") {
+        calls.push("DELETE 8");
+        return new Response(null, { status: 200 });
+      }
+      return jsonResponse({}, 404);
+    });
+    const app = await buildAuthedServer(makeConfig());
+    const hidden = await app.inject({
+      method: "POST",
+      url: "/api/recommendations/hidden",
+      payload: { tmdbId: 489, title: "Good Will Hunting", year: 1997 },
+    });
+    expect(hidden.statusCode).toBe(200);
+    expect(hidden.json()).toMatchObject({ id: 8, tmdbId: 489 });
+    expect(JSON.parse(calls[0]!.slice(5))).toEqual({ tmdbId: 489, movieTitle: "Good Will Hunting", movieYear: 1997 });
+
+    const again = await app.inject({
+      method: "POST",
+      url: "/api/recommendations/hidden",
+      payload: { tmdbId: 426, title: "Vertigo" },
+    });
+    expect(again.json()).toMatchObject({ id: 7 });
+    expect(calls).toHaveLength(1);
+
+    const preferences = await app.inject({ method: "GET", url: "/api/recommendations/preferences" });
+    expect(preferences.json().hidden).toEqual([{ id: 7, tmdbId: 426, title: "Vertigo", year: 1958 }]);
+
+    const restored = await app.inject({ method: "DELETE", url: "/api/recommendations/hidden/8" });
+    expect(restored.statusCode).toBe(204);
+    expect(calls).toContain("DELETE 8");
     await app.close();
   });
 

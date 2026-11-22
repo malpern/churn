@@ -31,6 +31,8 @@ interface SearchResultsProps {
   onRequest: (result: SearchResult) => void;
   requestingKey: string | null;
   requestDisabled: boolean;
+  isFavorite?: (result: SearchResult) => boolean;
+  onToggleFavorite?: (result: SearchResult) => void;
 }
 
 export function SearchResults({
@@ -44,6 +46,8 @@ export function SearchResults({
   onRequest,
   requestingKey,
   requestDisabled,
+  isFavorite,
+  onToggleFavorite,
 }: SearchResultsProps) {
   const grid = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -121,6 +125,8 @@ export function SearchResults({
                 requestError={requestErrors[result.key]}
                 requesting={requestingKey === result.key}
                 requestDisabled={requestDisabled}
+                favorite={isFavorite?.(result)}
+                onToggleFavorite={result.kind === "movie" ? onToggleFavorite : undefined}
               />
             ))}
           </div>

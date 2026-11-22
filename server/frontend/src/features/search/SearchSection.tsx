@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/input-group";
 
 import { RecommendedMovies } from "@/features/search/RecommendedMovies";
+import { useRecommendationPreferences } from "@/features/search/use-recommendation-preferences";
 import { SearchResults, SearchResultsSkeleton } from "@/features/search/SearchResults";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useRequestDefaults } from "@/features/search/use-request-defaults";
@@ -68,6 +69,7 @@ export function SearchSection() {
     placeholderData: keepPreviousData,
   });
 
+  const taste = useRecommendationPreferences();
   const recommendationsQuery = useQuery({
     queryKey: ["recommendations", "movies"],
     queryFn: fetchMovieRecommendations,
@@ -248,6 +250,9 @@ export function SearchSection() {
           requestLinks={requestLinks}
           requestErrors={requestErrors}
           requestDisabled={optionsQuery.isLoading || requestMutation.isPending}
+          isFavorite={taste.isFavorite}
+          onToggleFavorite={taste.toggleFavorite}
+          onDismiss={taste.hide}
         />
       ) : null}
 
@@ -273,6 +278,8 @@ export function SearchSection() {
           onRequest={handleRequest}
           requestingKey={requestingKey}
           requestDisabled={optionsQuery.isLoading || requestMutation.isPending}
+          isFavorite={taste.isFavorite}
+          onToggleFavorite={taste.toggleFavorite}
         />
       ) : null}
 

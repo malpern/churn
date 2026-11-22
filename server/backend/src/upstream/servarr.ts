@@ -119,6 +119,14 @@ export interface ServarrRecommendedMovie extends ServarrMovieResource {
   isRecommendation?: boolean;
 }
 
+/** A movie Radarr will never suggest or import from a list again. */
+export interface ServarrExclusion {
+  id: number;
+  tmdbId: number;
+  movieTitle?: string;
+  movieYear?: number;
+}
+
 export interface ServarrQueueStatusMessage {
   title?: string;
   messages?: string[];
@@ -518,6 +526,35 @@ export function createArrClient(service: ArrServiceId, config: ServiceConfig, ti
         `${config.url}/api/v3/series/${id}`,
         { timeoutMs, headers: authHeaders(), method: "PUT", body: payload },
       );
+    },
+
+    /** Look one movie up by TMDB id through Radarr's metadata, without adding it. */
+    async lookupMovieByTmdbId(tmdbId: number): Promise<ServarrMovieResource> {
+      return getLookup<ServarrMovieResource>(`/api/v3/movie/lookup/tmdb?tmdbId=${tmdbId}`);
+    },
+
+    async listExclusions(): Promise<ServarrExclusion[]> {
+      return get<ServarrExclusion[]>("/api/v3/exclusions");
+    },
+
+    async addExclusion(exclusion: {
+      tmdbId: number;
+      movieTitle: string;
+      movieYear?: number;
+    }): Promise<ServarrExclusion> {
+      return postJson<ServarrExclusion>(
+        service,
+        `${config.url}/api/v3/exclusions`,
+        { ...exclusion, movieYear: exclusion.movieYear ?? 0 },
+        { timeoutMs, headers: authHeaders() },
+      );
+    },
+
+    async deleteExclusion(id: number): Promise<void> {
+      await deleteRequest(service, `${config.url}/api/v3/exclusions/${id}`, {
+        timeoutMs,
+        headers: authHeaders(),
+      });
     },
 
     async addMovie(payload: Record<string, unknown>): Promise<ServarrMovieResource> {

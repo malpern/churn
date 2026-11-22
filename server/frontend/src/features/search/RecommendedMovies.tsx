@@ -13,6 +13,9 @@ interface RecommendedMoviesProps {
   requestLinks: Record<string, string>;
   requestErrors: Record<string, string>;
   requestDisabled: boolean;
+  isFavorite: (result: SearchResult) => boolean;
+  onToggleFavorite: (result: SearchResult) => void;
+  onDismiss: (result: SearchResult) => void;
 }
 
 /**
@@ -29,6 +32,9 @@ export function RecommendedMovies({
   requestLinks,
   requestErrors,
   requestDisabled,
+  isFavorite,
+  onToggleFavorite,
+  onDismiss,
 }: RecommendedMoviesProps) {
   if (loading && !data) {
     return (
@@ -59,6 +65,9 @@ export function RecommendedMovies({
             requestError={requestErrors[result.key]}
             requesting={requestingKey === result.key}
             requestDisabled={requestDisabled}
+            favorite={isFavorite(result)}
+            onToggleFavorite={onToggleFavorite}
+            onDismiss={onDismiss}
           />
         ))}
       </div>
@@ -69,12 +78,20 @@ export function RecommendedMovies({
 function RecommendedHeading() {
   return (
     <div className="flex flex-col gap-1">
+      <div className="flex items-baseline justify-between gap-4">
       <h2 id="recommended-heading" className="flex items-center gap-2 font-heading text-xl font-semibold tracking-tight">
         <SparklesIcon aria-hidden="true" className="size-4 text-primary" />
         Recommended for you
       </h2>
+        <a
+          href="#/recommendations"
+          className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Manage
+        </a>
+      </div>
       <p className="text-sm text-muted-foreground">
-        Movies like the ones you've watched and kept. Search above for anything else.
+        Movies like the ones you've watched, kept or marked with a heart. Search above for anything else.
       </p>
     </div>
   );
