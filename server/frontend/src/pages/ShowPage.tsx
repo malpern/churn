@@ -26,6 +26,7 @@ import { EpisodeList, EpisodeRow } from "@/features/show/EpisodeRow";
 import { resumeTarget } from "@/features/show/episode-watch-state";
 import { ReleasePickerDialog } from "@/features/show/ReleasePickerDialog";
 import { SeasonTabs } from "@/features/show/SeasonTabs";
+import { CastStrip } from "@/features/person/CastStrip";
 import { DeleteTitleDialog } from "@/features/title/DeleteTitleDialog";
 import { TitleHeader } from "@/features/title/TitleHeader";
 import { TitleMenu, type TitleMenuItem } from "@/features/title/TitleMenu";
@@ -413,6 +414,7 @@ export function ShowPage({
               </EmptyHeader>
             </Empty>
           )}
+          {source === "jellyfin" ? <CastStrip itemId={id} /> : null}
         </>
       ) : null}
     </div>

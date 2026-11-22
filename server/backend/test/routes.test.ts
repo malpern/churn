@@ -7,6 +7,7 @@ import type { AppConfig } from "../src/config.js";
 import { buildServer } from "../src/server.js";
 import { clearRecommendationCache } from "../src/routes/recommendations.js";
 import { clearMetadataCache } from "../src/radarr-metadata.js";
+import { clearPersonCache } from "../src/routes/person.js";
 
 let testServerCounter = 0;
 
@@ -2085,6 +2086,194 @@ describe("movie recommendations", () => {
     const missing = await unconfigured.inject({ method: "GET", url: "/api/recommendations/movies" });
     expect(missing.json()).toMatchObject({ state: "unconfigured", results: [] });
     await unconfigured.close();
+  });
+});
+
+describe("cast, person pages and the TMDB key", () => {
+  const withJellyfin = () =>
+    makeConfig({ jellyfin: { id: "jellyfin", name: "Jellyfin", url: "http://jellyfin.test:8096", apiKey: "jf-key" } });
+
+  function jellyfinPersonFetch(extra: (url: string, init?: RequestInit) => Response | undefined = () => undefined) {
+    return installFetch((url, init) => {
+      const handled = extra(url, init);
+      if (handled) return handled;
+      if (url.includes("/Items/movie-1?") && url.includes("Fields=People")) {
+        return jsonResponse({
+          Id: "movie-1",
+          People: [
+            { Id: "p-crowe", Name: "Russell Crowe", Role: "John Nash", Type: "Actor", PrimaryImageTag: "t1" },
+            { Id: "p-howard", Name: "Ron Howard", Type: "Director" },
+            { Id: "p-goldsman", Name: "Akiva Goldsman", Type: "Writer" },
+            { Id: "p-goldsman", Name: "Akiva Goldsman", Type: "Producer" },
+            { Id: "p-howard", Name: "Ron Howard", Type: "Producer" },
+            { Id: "p-crowe", Name: "Russell Crowe", Role: "Narrator", Type: "Actor" },
+          ],
+        });
+      }
+      if (url.includes("/Items/p-crowe?")) {
+        return jsonResponse({
+          Id: "p-crowe",
+          Name: "Russell Crowe",
+          Type: "Person",
+          Overview: "An actor.",
+          PremiereDate: "1964-04-07T00:00:00.0000000Z",
+          ProductionLocations: ["Wellington, New Zealand"],
+          ProviderIds: { Tmdb: "934" },
+          ImageTags: { Primary: "t1" },
+        });
+      }
+      if (url.includes("PersonIds=p-crowe")) {
+        return jsonResponse({
+          Items: [
+            { Id: "movie-1", Name: "A Beautiful Mind", Type: "Movie", ProviderIds: { Tmdb: "453" } },
+            { Id: "orphan", Name: "Gladiator", Type: "Movie", ProviderIds: { Tmdb: "98" } },
+          ],
+        });
+      }
+      if (url.endsWith("/Users/test-user/Views")) return jsonResponse({ Items: [{ Id: "lib" }] });
+      if (url.includes("/Users/test-user/Items?") && url.includes("ParentId=lib")) {
+        return jsonResponse({ Items: [{ Id: "movie-1", Name: "A Beautiful Mind", Type: "Movie" }] });
+      }
+      if (url.startsWith("http://radarr.test:7878/api/v3/movie")) {
+        return jsonResponse([{ id: 7, tmdbId: 98, title: "Gladiator", hasFile: false }]);
+      }
+      return jsonResponse({}, 404);
+    });
+  }
+
+  it("lists cast in billing order and merges each crew member's jobs", async () => {
+    clearPersonCache();
+    jellyfinPersonFetch();
+    const app = await buildAuthedServer(withJellyfin());
+    const response = await app.inject({ method: "GET", url: "/api/cast/movie-1" });
+    expect(response.json()).toEqual({
+      state: "ok",
+      cast: [
+        {
+          id: "p-crowe",
+          name: "Russell Crowe",
+          role: "John Nash",
+          imageUrl: "/api/library/images/p-crowe?tag=t1",
+        },
+      ],
+      crew: [
+        { id: "p-howard", name: "Ron Howard", role: "Director" },
+        { id: "p-goldsman", name: "Akiva Goldsman", role: "Writer" },
+      ],
+    });
+    await app.close();
+  });
+
+  it("shows a person's library titles and, without a key, no more films", async () => {
+    clearPersonCache();
+    const fetchMock = jellyfinPersonFetch();
+    const app = await buildAuthedServer(withJellyfin());
+    const response = await app.inject({ method: "GET", url: "/api/person/p-crowe" });
+    const body = response.json();
+    expect(body.person).toEqual({
+      id: "p-crowe",
+      name: "Russell Crowe",
+      overview: "An actor.",
+      born: "1964-04-07",
+      birthplace: "Wellington, New Zealand",
+      imageUrl: "/api/library/images/p-crowe?tag=t1",
+      tmdbId: 934,
+    });
+    // The orphaned Gladiator record is not in any library view.
+    expect(body.library.map((item: { name: string }) => item.name)).toEqual(["A Beautiful Mind"]);
+    expect(body.more).toEqual({ state: "no_key", results: [] });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("themoviedb"))).toBe(false);
+    await app.close();
+  });
+
+  it("checks a key with TMDB before saving it, and uses it for the rest of a filmography", async () => {
+    clearPersonCache();
+    const tmdbCalls: string[] = [];
+    jellyfinPersonFetch((url, init) => {
+      if (!url.startsWith("https://api.themoviedb.org/")) return undefined;
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const key = new URL(url).searchParams.get("api_key") ?? headers.authorization;
+      tmdbCalls.push(new URL(url).pathname);
+      if (key !== "good-key") return jsonResponse({ status_message: "Invalid API key" }, 401);
+      if (url.includes("/configuration")) return jsonResponse({ images: {} });
+      if (url.includes("/person/934/movie_credits")) {
+        return jsonResponse({
+          cast: [
+            { id: 453, title: "A Beautiful Mind", vote_count: 10000, character: "John Nash" },
+            { id: 98, title: "Gladiator", release_date: "2000-05-01", vote_count: 20000, poster_path: "/g.jpg" },
+            { id: 1, title: "Adult thing", adult: true },
+            { id: 500, title: "Romper Stomper", release_date: "1992-11-12", vote_count: 300, vote_average: 6.8 },
+          ],
+          crew: [{ id: 501, title: "The Water Diviner", job: "Director", vote_count: 1500 }],
+        });
+      }
+      return jsonResponse({}, 404);
+    });
+    const app = await buildAuthedServer(withJellyfin());
+
+    const before = await app.inject({ method: "GET", url: "/api/settings/tmdb" });
+    expect(before.json()).toMatchObject({ configured: false });
+
+    const rejected = await app.inject({
+      method: "PUT",
+      url: "/api/settings/tmdb",
+      payload: { apiKey: "bad-key" },
+    });
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json().error.code).toBe("invalid_key");
+
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/settings/tmdb",
+      payload: { apiKey: " good-key " },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ configured: true, addedBy: "tester", suggest: false });
+    expect(JSON.stringify(saved.json())).not.toContain("good-key");
+
+    const person = await app.inject({ method: "GET", url: "/api/person/p-crowe" });
+    const more = person.json().more;
+    expect(more.state).toBe("ok");
+    expect(more.results.map((movie: { title: string }) => movie.title)).toEqual([
+      "Gladiator",
+      "The Water Diviner",
+      "Romper Stomper",
+    ]);
+    expect(more.results[0]).toMatchObject({ inLibrary: true, available: false, radarrId: 7, year: 2000 });
+    expect(more.results[0].imageUrl).toContain("/api/search/images/radarr?url=");
+    expect(more.results[2]).toMatchObject({ inLibrary: false, rating: 6.8 });
+
+    const removed = await app.inject({ method: "DELETE", url: "/api/settings/tmdb" });
+    expect(removed.json()).toMatchObject({ configured: false });
+    const after = await app.inject({ method: "GET", url: "/api/person/p-crowe" });
+    expect(after.json().more.state).toBe("no_key");
+    expect(tmdbCalls.filter((call) => call.includes("movie_credits"))).toHaveLength(1);
+    await app.close();
+  });
+
+  it("suggests a key only once someone in the household has finished something", async () => {
+    clearPersonCache();
+    let othersWatched = false;
+    installFetch((url) => {
+      if (url.includes("Filters=IsPlayed")) {
+        const mine = url.includes("/Users/test-user/");
+        return jsonResponse({ Items: !mine && othersWatched ? [{ Id: "e1" }] : [], TotalRecordCount: 0 });
+      }
+      if (url.endsWith("/Users")) return jsonResponse([{ Id: "test-user" }, { Id: "kid" }]);
+      return jsonResponse({}, 404);
+    });
+    const app = await buildAuthedServer(withJellyfin());
+    expect((await app.inject({ method: "GET", url: "/api/settings/tmdb" })).json()).toEqual({
+      configured: false,
+      suggest: false,
+    });
+    othersWatched = true;
+    clearPersonCache();
+    expect((await app.inject({ method: "GET", url: "/api/settings/tmdb" })).json()).toEqual({
+      configured: false,
+      suggest: true,
+    });
+    await app.close();
   });
 });
 

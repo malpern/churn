@@ -843,3 +843,58 @@ export interface PlaybackReport {
   isPaused?: boolean;
   playbackMethod?: "direct" | "hls";
 }
+
+/** Someone credited on a movie or show, from Jellyfin. */
+export interface PersonCredit {
+  /** Jellyfin person id; the key of their page. */
+  id: string;
+  name: string;
+  /** The character for cast, the job for crew. */
+  role?: string;
+  imageUrl?: string;
+}
+
+export interface CreditsResponse {
+  state: LibraryState;
+  detail?: string;
+  cast: PersonCredit[];
+  /** Directors and writers. */
+  crew: PersonCredit[];
+}
+
+export type PersonMoreState =
+  /** No TMDB key has been added in Settings. */
+  | "no_key"
+  /** TMDB has no id for this person in Jellyfin. */
+  | "no_tmdb_id"
+  | "invalid_key"
+  | "unavailable"
+  | "ok";
+
+export interface PersonResponse {
+  person: {
+    id: string;
+    name: string;
+    overview?: string;
+    /** ISO date. */
+    born?: string;
+    birthplace?: string;
+    imageUrl?: string;
+    tmdbId?: number;
+  };
+  /** Their movies and shows the household has, newest first. */
+  library: LibraryItem[];
+  /** The rest of their films, from TMDB; needs a TMDB key. */
+  more: { state: PersonMoreState; results: SearchResult[] };
+}
+
+export interface TmdbSettingsResponse {
+  configured: boolean;
+  addedAt?: string;
+  addedBy?: string;
+  /**
+   * True when it is worth suggesting a key: none is set, and someone in the
+   * household has finished something, so churn has been set up and used.
+   */
+  suggest: boolean;
+}

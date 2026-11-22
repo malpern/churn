@@ -1,4 +1,4 @@
-import { ChevronDownIcon, LogOutIcon, SparklesIcon, UsersIcon } from "lucide-react";
+import { ChevronDownIcon, LogOutIcon, SettingsIcon, SparklesIcon, UsersIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,9 @@ const NAV_ITEMS = [
 
 export function AppHeader({ route }: AppHeaderProps) {
   const { session, logout, isPending } = useAuth();
-  const activePage = route.page === "show" || route.page === "movie" || route.page === "play" ? "library" : route.page;
+  const activePage = route.page === "show" || route.page === "movie" || route.page === "play" || route.page === "person"
+      ? "library"
+       : route.page;
   const { track, indicator, onClick } = useSelectionUnderline<HTMLElement>(activePage);
   const user = session?.user;
   const isAdmin = user?.isAdmin === true;
@@ -109,6 +111,12 @@ export function AppHeader({ route }: AppHeaderProps) {
                         <a href="#/people">
                           <UsersIcon />
                           People
+                        </a>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <a href="#/settings">
+                          <SettingsIcon />
+                          Settings
                         </a>
                       </DropdownMenuItem>
                     </DropdownMenuGroup>

@@ -51,6 +51,10 @@ export interface JellyfinItem {
   /** Only returned when the query asks for the Path field. */
   Path?: string;
   ProviderIds?: Record<string, string>;
+  /** Cast and crew; only returned when the query asks for the People field. */
+  People?: JellyfinPerson[];
+  /** A person's birthplace; Jellyfin stores it as a production location. */
+  ProductionLocations?: string[];
   UserData?: {
     PlaybackPositionTicks?: number;
     /** Jellyfin's own percentage; present on resume-list items. */
@@ -67,6 +71,16 @@ export interface JellyfinItem {
   BackdropImageTags?: string[];
   /** Poster tag of the series an episode belongs to. */
   SeriesPrimaryImageTag?: string;
+}
+
+export interface JellyfinPerson {
+  Id?: string;
+  Name?: string;
+  /** The character for an actor, otherwise usually empty. */
+  Role?: string;
+  /** Actor, Director, Writer, Producer, GuestStar, Composer, ... */
+  Type?: string;
+  PrimaryImageTag?: string;
 }
 
 export interface JellyfinMediaStream {
@@ -169,7 +183,7 @@ const LIBRARY_QUERY = new URLSearchParams({
   EnableImageTypes: "Primary",
 });
 const DETAIL_FIELDS =
-  "ProductionYear,RunTimeTicks,CommunityRating,OfficialRating,Genres,Overview,ProviderIds,PremiereDate";
+  "ProductionYear,RunTimeTicks,CommunityRating,OfficialRating,Genres,Overview,ProviderIds,PremiereDate,ProductionLocations";
 const RESUME_FIELDS =
   "RunTimeTicks,SeriesId,ParentIndexNumber,IndexNumber,ImageTags,BackdropImageTags,SeriesPrimaryImageTag";
 
@@ -460,6 +474,59 @@ export function createJellyfinClient(
         `${config.url}/Items/${encodeURIComponent(itemId)}?${query.toString()}`,
         { timeoutMs, headers: authHeaders() },
       );
+    },
+
+    /** An item with its cast and crew, as `userId` sees it. */
+    async getItemPeople(itemId: string, userId: string): Promise<JellyfinItem> {
+      if (!token) {
+        throw new UpstreamError("jellyfin", "unauthorized", "Jellyfin API key is not configured");
+      }
+      const query = new URLSearchParams({ Fields: "People", userId });
+      return fetchJson<JellyfinItem>(
+        "jellyfin",
+        `${config.url}/Items/${encodeURIComponent(itemId)}?${query.toString()}`,
+        { timeoutMs, headers: authHeaders() },
+      );
+    },
+
+    /**
+     * Movies and shows a person is credited on. Like any global recursive
+     * query this can include orphaned records, so callers keep only items that
+     * are also in `listLibrary`.
+     */
+    async listItemsByPerson(personId: string, userId: string): Promise<JellyfinItem[]> {
+      if (!token) {
+        throw new UpstreamError("jellyfin", "unauthorized", "Jellyfin API key is not configured");
+      }
+      const query = new URLSearchParams(LIBRARY_QUERY);
+      query.set("PersonIds", personId);
+      query.set("SortBy", "ProductionYear,SortName");
+      query.set("SortOrder", "Descending");
+      const response = await fetchJson<JellyfinItemsResponse>(
+        "jellyfin",
+        `${config.url}/Users/${encodeURIComponent(userId)}/Items?${query.toString()}`,
+        { timeoutMs, headers: authHeaders() },
+      );
+      return response.Items ?? [];
+    },
+
+    /** True once `userId` has finished at least one movie or episode. */
+    async hasPlayedAnything(userId: string): Promise<boolean> {
+      if (!token) {
+        throw new UpstreamError("jellyfin", "unauthorized", "Jellyfin API key is not configured");
+      }
+      const query = new URLSearchParams({
+        Recursive: "true",
+        IncludeItemTypes: "Movie,Episode",
+        Filters: "IsPlayed",
+        Limit: "1",
+      });
+      const response = await fetchJson<JellyfinItemsResponse>(
+        "jellyfin",
+        `${config.url}/Users/${encodeURIComponent(userId)}/Items?${query.toString()}`,
+        { timeoutMs, headers: authHeaders() },
+      );
+      return (response.Items?.length ?? 0) > 0 || (response.TotalRecordCount ?? 0) > 0;
     },
 
     async getPlaybackInfo(itemId: string, userId: string): Promise<PlaybackInfoResponse> {

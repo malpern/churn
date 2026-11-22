@@ -32,6 +32,7 @@ import { useRecommendationPreferences } from "@/features/search/use-recommendati
 import { SearchResults, SearchResultsSkeleton } from "@/features/search/SearchResults";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useTitleRequests } from "@/features/search/use-title-requests";
+import { TmdbSuggestion } from "@/features/person/TmdbSuggestion";
 
 
 export function SearchSection() {
@@ -140,6 +141,8 @@ export function SearchSection() {
           onDismiss={taste.hide}
         />
       ) : null}
+
+      {!searchEnabled ? <TmdbSuggestion placement="search" /> : null}
 
       {!searchEnabled && !hasRecommendations ? (
         <div className="flex min-h-90 flex-1 items-center justify-center dashed-frame px-6 py-12">

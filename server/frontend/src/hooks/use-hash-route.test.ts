@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseHash, playHash, showHash, stripRestartParam } from "./use-hash-route";
+import { parseHash, personHash, playHash, showHash, stripRestartParam } from "./use-hash-route";
 
 describe("hash routing", () => {
   it("parses the basic pages", () => {
@@ -94,5 +94,12 @@ describe("hash routing", () => {
       source: "jellyfin",
       id: "a b",
     });
+  });
+
+  it("routes person pages and settings", () => {
+    expect(parseHash(personHash("abc 1"))).toEqual({ page: "person", id: "abc 1" });
+    expect(parseHash("#/settings")).toEqual({ page: "settings" });
+    // The household profiles page keeps its own route.
+    expect(parseHash("#/people")).toEqual({ page: "people" });
   });
 });
