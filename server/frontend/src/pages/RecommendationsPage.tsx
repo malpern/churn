@@ -30,7 +30,8 @@ export function RecommendationsPage() {
           <CardTitle>Favourites</CardTitle>
           <CardDescription>
             Movies you love. They steer your recommendations without being added to the
-            library. Add one with the heart on any movie in Find something new.
+            library. Add one with the heart on any movie in Find something new. Movies
+            you mark as favourites in Jellyfin count too.
           </CardDescription>
         </CardHeader>
         <CardContent>
