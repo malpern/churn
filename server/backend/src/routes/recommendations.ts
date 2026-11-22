@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { AppConfig } from "../config.js";
 import { requireAuth } from "../auth.js";
 import { ApiError } from "../errors.js";
+import { isMovieAvailable, mapMovieResource } from "../search.js";
 import { buildDiscoverRows } from "../discover.js";
 import { metadataRecommendations } from "../radarr-metadata.js";
 import type { FavoriteStore } from "../recommendation-favorites.js";
@@ -14,6 +15,7 @@ import {
 } from "../recommendations.js";
 import type {
   DiscoverResponse,
+  SearchResult,
   FavoriteMovieSummary,
   RecommendationPreferences,
   RecommendationsResponse,
@@ -131,6 +133,46 @@ export function registerRecommendationRoutes(
       return response;
     }
   });
+
+  app.get<{ Params: { tmdbId: string } }>(
+    "/api/recommendations/similar/:tmdbId",
+    async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      requireAuth(request);
+      const tmdbId = parseTmdbId(request.params.tmdbId);
+      if (!config.services.radarr.apiKey) {
+        const response: RecommendationsResponse = {
+          state: "unconfigured",
+          detail: "Radarr is not configured.",
+          results: [],
+        };
+        return response;
+      }
+      const client = createArrClient("radarr", config.services.radarr, config.requestTimeoutMs);
+      try {
+        const [ids, library, excluded] = await Promise.all([
+          metadataRecommendations(tmdbId, config.requestTimeoutMs),
+          client.listMovies(),
+          client
+            .listExclusions()
+            .then((entries) => new Set(entries.map((entry) => entry.tmdbId)))
+            .catch(() => new Set<number>()),
+        ]);
+        const response: RecommendationsResponse = {
+          state: "ok",
+          results: await similarMovies(client, ids, library, excluded, tmdbId),
+        };
+        return response;
+      } catch (error) {
+        const response: RecommendationsResponse = {
+          state: stateForError(error),
+          detail: errorMessage(error),
+          results: [],
+        };
+        return response;
+      }
+    },
+  );
 
   app.get("/api/recommendations/preferences", async (request, reply) => {
     reply.header("cache-control", "no-store");
@@ -332,6 +374,46 @@ async function withFavoriteSeeds(
     });
   });
   return candidates;
+}
+
+/** How many related movies the movie page shows. */
+const SIMILAR_LIMIT = 18;
+
+/**
+ * "More like this" for one movie: the movies Radarr's metadata recommends for
+ * it, in its order. Movies already in Radarr stay, marked requested or
+ * available and linked to their page, so the row doubles as navigation around
+ * the library; hidden movies are dropped.
+ */
+async function similarMovies(
+  client: ReturnType<typeof createArrClient>,
+  ids: number[],
+  library: ServarrMovieResource[],
+  excluded: Set<number>,
+  self: number,
+): Promise<SearchResult[]> {
+  const owned = new Map(
+    library.filter((movie) => movie.tmdbId).map((movie) => [movie.tmdbId!, movie] as const),
+  );
+  const wanted = [...new Set(ids)]
+    .filter((id) => id !== self && !excluded.has(id))
+    .slice(0, SIMILAR_LIMIT);
+  const movies = await Promise.all(
+    wanted.map(async (id) => owned.get(id) ?? (await lookupMovie(client, id))),
+  );
+  const results: SearchResult[] = [];
+  for (const movie of movies) {
+    if (!movie?.tmdbId) continue;
+    const mine = owned.get(movie.tmdbId);
+    const result = mapMovieResource(
+      movie,
+      mine !== undefined,
+      mine ? isMovieAvailable(mine) : undefined,
+    );
+    if (!result) continue;
+    results.push(mine?.id ? { ...result, radarrId: mine.id } : result);
+  }
+  return results;
 }
 
 async function lookupMovie(
