@@ -273,6 +273,19 @@ export interface RecommendationsResponse {
   results: SearchResult[];
 }
 
+export interface CollectionResponse {
+  state: ArrServiceState;
+  detail?: string;
+  /** Absent when the movie is not part of a series. */
+  collection?: {
+    tmdbId: number;
+    name: string;
+    overview?: string;
+    /** Every part in release order, owned ones marked and linked. */
+    results: SearchResult[];
+  };
+}
+
 export interface DiscoverRow {
   /** "trending", "popular", or "list:<Radarr import list id>". */
   id: string;

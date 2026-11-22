@@ -17,6 +17,7 @@ const CARD_CACHES: QueryKey[] = [
   ["recommendations"],
   ["discover"],
   ["similar"],
+  ["collection"],
 ];
 
 /**
@@ -150,11 +151,18 @@ export function useTitleRequests() {
 /** Mark the card with `key` as requested in any cached card list shape. */
 function markRequested(current: unknown, key: string): unknown {
   if (!current || typeof current !== "object") return current;
-  const value = current as { results?: SearchResult[]; rows?: Array<{ results: SearchResult[] }> };
+  const value = current as {
+    results?: SearchResult[];
+    rows?: Array<{ results: SearchResult[] }>;
+    collection?: { results: SearchResult[] };
+  };
   const mark = (results: SearchResult[]) =>
     results.map((result) => (result.key === key ? { ...result, inLibrary: true } : result));
   if (Array.isArray(value.results)) {
     return { ...value, results: mark(value.results) };
+  }
+  if (value.collection && Array.isArray(value.collection.results)) {
+    return { ...value, collection: { ...value.collection, results: mark(value.collection.results) } };
   }
   if (Array.isArray(value.rows)) {
     return { ...value, rows: value.rows.map((row) => ({ ...row, results: mark(row.results) })) };

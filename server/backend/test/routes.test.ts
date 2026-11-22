@@ -2022,6 +2022,54 @@ describe("movie recommendations", () => {
     await app.close();
   });
 
+  it("shows the series a movie belongs to, in release order, owned parts linked", async () => {
+    clearRecommendationCache();
+    clearMetadataCache();
+    const part = (id: number, title: string, year: number) => ({
+      TmdbId: id,
+      Title: title,
+      Year: year,
+      Images: [{ CoverType: "Poster", Url: `https://image.tmdb.org/t/p/original/${id}.jpg` }],
+      MovieRatings: { Tmdb: { Value: 8, Count: 100 } },
+    });
+    installFetch((url) => {
+      if (url === "https://api.radarr.video/v1/movie/693134") {
+        return jsonResponse({ TmdbId: 693134, Title: "Dune: Part Two", Collection: { TmdbId: 726871, Name: "Dune Collection" } });
+      }
+      if (url === "https://api.radarr.video/v1/movie/collection/726871") {
+        return jsonResponse({
+          TmdbId: 726871,
+          Name: "Dune Collection",
+          Overview: "A mythic journey across Arrakis.",
+          Parts: [part(1170608, "Dune: Part Three", 2026), part(438631, "Dune", 2021), part(693134, "Dune: Part Two", 2024)],
+        });
+      }
+      if (url === "https://api.radarr.video/v1/movie/453") {
+        return jsonResponse({ TmdbId: 453, Title: "A Beautiful Mind", Collection: null });
+      }
+      if (url === "http://radarr.test:7878/api/v3/movie") {
+        return jsonResponse([{ id: 3, tmdbId: 693134, title: "Dune: Part Two", hasFile: true }]);
+      }
+      return jsonResponse({}, 404);
+    });
+    const app = await buildAuthedServer(makeConfig());
+    const response = await app.inject({ method: "GET", url: "/api/recommendations/collection/693134" });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.collection).toMatchObject({ name: "Dune Collection", overview: "A mythic journey across Arrakis." });
+    expect(body.collection.results).toEqual([
+      expect.objectContaining({ title: "Dune", year: 2021, inLibrary: false }),
+      expect.objectContaining({ title: "Dune: Part Two", inLibrary: true, available: true, radarrId: 3 }),
+      expect.objectContaining({ title: "Dune: Part Three", year: 2026, inLibrary: false }),
+    ]);
+    expect(body.collection.results[0].imageUrl).toContain("/api/search/images/radarr?url=");
+
+    const single = await app.inject({ method: "GET", url: "/api/recommendations/collection/453" });
+    expect(single.json()).toEqual({ state: "ok" });
+    await app.close();
+  });
+
   it("reports Radarr's state instead of failing the page", async () => {
     clearRecommendationCache();
     installFetch(() => jsonResponse({ message: "nope" }, 401));
