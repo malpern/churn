@@ -110,6 +110,15 @@ export interface ServarrMovieResource extends ServarrLookupBase {
   };
 }
 
+/** An entry from Radarr's import-list feed, which recommendations come through. */
+export interface ServarrRecommendedMovie extends ServarrMovieResource {
+  /** Already in Radarr's library. */
+  isExisting?: boolean;
+  /** On Radarr's import-list exclusion list. */
+  isExcluded?: boolean;
+  isRecommendation?: boolean;
+}
+
 export interface ServarrQueueStatusMessage {
   title?: string;
   messages?: string[];
@@ -348,6 +357,20 @@ export function createArrClient(service: ArrServiceId, config: ServiceConfig, ti
 
     async listMovies(): Promise<ServarrMovieResource[]> {
       return get<ServarrMovieResource[]>("/api/v3/movie");
+    },
+
+    /**
+     * Radarr's own recommendations: movies related to the ones in its library,
+     * from Radarr's metadata service (what Radarr's Discover page shows). Needs
+     * no account or key beyond Radarr's.
+     */
+    async listMovieRecommendations(): Promise<ServarrRecommendedMovie[]> {
+      const query = new URLSearchParams({
+        includeRecommendations: "true",
+        includeTrending: "false",
+        includePopular: "false",
+      });
+      return get<ServarrRecommendedMovie[]>(`/api/v3/importlist/movie?${query.toString()}`);
     },
 
     async getIndexers(): Promise<ServarrIndexer[]> {

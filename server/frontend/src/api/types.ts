@@ -319,6 +319,13 @@ export interface SearchResult {
   seasons?: Array<{ seasonNumber: number; monitored: boolean }>;
 }
 
+export interface RecommendationsResponse {
+  /** Radarr's state; recommendations are movies only. */
+  state: ArrServiceState;
+  detail?: string;
+  results: SearchResult[];
+}
+
 export interface SearchServiceState {
   id: "sonarr" | "radarr";
   state: ArrServiceState;

@@ -40,6 +40,8 @@ export interface JellyfinItem {
   RunTimeTicks?: number;
   CommunityRating?: number;
   OfficialRating?: string;
+  /** Only returned when the query asks for the Genres field. */
+  Genres?: string[];
   Overview?: string;
   PremiereDate?: string;
   ParentIndexNumber?: number;

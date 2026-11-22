@@ -6,10 +6,12 @@ import { toast } from "sonner";
 import {
   createRequest,
   fetchRequestOptions,
+  fetchMovieRecommendations,
   fetchSearch,
 } from "@/api/client";
 import type {
   CreateRequestInput,
+  RecommendationsResponse,
   SearchResponse,
   SearchResult,
   SearchServiceState,
@@ -29,6 +31,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 
+import { RecommendedMovies } from "@/features/search/RecommendedMovies";
 import { SearchResults, SearchResultsSkeleton } from "@/features/search/SearchResults";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useRequestDefaults } from "@/features/search/use-request-defaults";
@@ -65,6 +68,12 @@ export function SearchSection() {
     placeholderData: keepPreviousData,
   });
 
+  const recommendationsQuery = useQuery({
+    queryKey: ["recommendations", "movies"],
+    queryFn: fetchMovieRecommendations,
+    staleTime: 10 * 60_000,
+  });
+
   const requestMutation = useMutation({
     mutationFn: ({ input }: RequestMutationVariables) => createRequest(input),
     onSuccess: (data, variables) => {
@@ -97,6 +106,18 @@ export function SearchSection() {
       }
       if (key) {
         queryClient.setQueriesData<SearchResponse>({ queryKey: ["search"] }, (current) =>
+          current
+            ? {
+                ...current,
+                results: current.results.map((result) =>
+                  result.key === key ? { ...result, inLibrary: true } : result,
+                ),
+              }
+            : current,
+        );
+      }
+      if (key) {
+        queryClient.setQueryData<RecommendationsResponse>(["recommendations", "movies"], (current) =>
           current
             ? {
                 ...current,
@@ -172,6 +193,9 @@ export function SearchSection() {
     requestMutation.mutate({ input, result });
   }
 
+  const hasRecommendations =
+    recommendationsQuery.isLoading ||
+    (recommendationsQuery.data?.state === "ok" && recommendationsQuery.data.results.length > 0);
   const searchData = searchQuery.data;
   const results = searchData?.results ?? [];
   const serviceNotices = searchData?.services.filter(
@@ -216,6 +240,18 @@ export function SearchSection() {
       ) : null}
 
       {!searchEnabled ? (
+        <RecommendedMovies
+          data={recommendationsQuery.data}
+          loading={recommendationsQuery.isLoading}
+          onRequest={handleRequest}
+          requestingKey={requestingKey}
+          requestLinks={requestLinks}
+          requestErrors={requestErrors}
+          requestDisabled={optionsQuery.isLoading || requestMutation.isPending}
+        />
+      ) : null}
+
+      {!searchEnabled && !hasRecommendations ? (
         <div className="flex min-h-90 flex-1 items-center justify-center dashed-frame px-6 py-12">
           <p className="text-center text-sm text-muted-foreground">
             Results will appear as you begin typing…
