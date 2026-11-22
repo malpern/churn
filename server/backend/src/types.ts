@@ -271,6 +271,30 @@ export interface RecommendationsResponse {
   results: SearchResult[];
 }
 
+export interface FavoriteMovieSummary {
+  tmdbId: number;
+  title: string;
+  year?: number;
+  genres: string[];
+  imageUrl?: string;
+}
+
+export interface HiddenMovie {
+  /** Radarr's exclusion id, used to bring the movie back. */
+  id: number;
+  tmdbId: number;
+  title: string;
+  year?: number;
+}
+
+export interface RecommendationPreferences {
+  favorites: FavoriteMovieSummary[];
+  hidden: HiddenMovie[];
+  /** Radarr's state for the hidden list, which lives in Radarr. */
+  hiddenState: ArrServiceState;
+  hiddenDetail?: string;
+}
+
 export interface SearchServiceState {
   id: "sonarr" | "radarr";
   state: ArrServiceState;
