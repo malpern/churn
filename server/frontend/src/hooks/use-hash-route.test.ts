@@ -102,4 +102,9 @@ describe("hash routing", () => {
     // The household profiles page keeps its own route.
     expect(parseHash("#/people")).toEqual({ page: "people" });
   });
+
+  it("routes the Learn page and its subjects", () => {
+    expect(parseHash("#/learn")).toEqual({ page: "learn" });
+    expect(parseHash("#/learn/science")).toEqual({ page: "learn", subject: "science" });
+  });
 });

@@ -20,7 +20,8 @@ export type AppRoute =
   | { page: "people" }
   | { page: "recommendations" }
   | { page: "person"; id: string }
-  | { page: "settings" };
+  | { page: "settings" }
+  | { page: "learn"; subject?: string };
 
 export function useHashRoute(
   onNavigate?: (previous: AppRoute, next: AppRoute, commit: () => void) => void,
@@ -137,6 +138,9 @@ export function parseHash(hash: string): AppRoute {
   }
   if (parts.length === 1 && parts[0] === "recommendations") {
     return { page: "recommendations" };
+  }
+  if (parts[0] === "learn" && parts.length <= 2) {
+    return parts[1] ? { page: "learn", subject: decodeURIComponent(parts[1]) } : { page: "learn" };
   }
   if (parts.length === 1 && parts[0] === "settings") {
     return { page: "settings" };

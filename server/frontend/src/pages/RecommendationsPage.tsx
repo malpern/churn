@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LearningInterestsCard } from "@/features/learn/LearningInterestsCard";
 import { useRecommendationPreferences } from "@/features/search/use-recommendation-preferences";
 
 /**
@@ -25,6 +26,7 @@ export function RecommendationsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="sr-only">Recommendations</h1>
+      <LearningInterestsCard />
       <Card>
         <CardHeader>
           <CardTitle>Favourites</CardTitle>
